@@ -435,7 +435,7 @@
       <b style="color:var(--text)">Skróty klawiszowe</b><br>
       <kbd>Spacja</kbd>/<kbd>Enter</kbd> — zagraj następny dźwięk z listy<br>
       <kbd>↑</kbd> <kbd>↓</kbd> — przesuń wskaźnik bez grania<br>
-      <kbd>1</kbd>…<kbd>9</kbd> <kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd> — zagraj konkretny pad<br>
+      <kbd>1</kbd>…<kbd>9</kbd> <kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd> <kbd>Q</kbd> — zagraj konkretny pad<br>
       <kbd>Esc</kbd> — natychmiast zatrzymaj wszystko
     </div>
   </aside>
@@ -456,10 +456,10 @@ const CUES = [
   {id:"muzyczka",     pad:null,key:null,name:"Muzyczka",             file:null},
   {id:"disgusting",   pad:8,  key:"8", name:"Spongebob Disgusting",  file:"samples/disgusting.mp3"},
   {id:"badumtss",     pad:9,  key:"9", name:"Ba Dum Tss",            file:"samples/badumtss.mp3"},
-  {id:"wellwellwell", pad:null,key:null,name:"Well, Well, Well",     file:null},
-  {id:"fiveminutes",  pad:10, key:"0", name:"5 Minutes Later",       file:"samples/5-minutes-later.mp3"},
-  {id:"dzwonek",      pad:11, key:"-", name:"Dzwonek szkolny",       file:"samples/school-bell.mp3"},
-  {id:"yeahbaby",     pad:12, key:"=", name:"Woo Yeah Baby",         file:"samples/woo-yeah-baby.mp3"},
+  {id:"wellwellwell", pad:10, key:"0", name:"Well, Well, Well",      file:"samples/well-well-well.mp3"},
+  {id:"fiveminutes",  pad:11, key:"-", name:"5 Minutes Later",       file:"samples/5-minutes-later.mp3"},
+  {id:"dzwonek",      pad:12, key:"=", name:"Dzwonek szkolny",       file:"samples/school-bell.mp3"},
+  {id:"yeahbaby",     pad:13, key:"q", name:"Woo Yeah Baby",         file:"samples/woo-yeah-baby.mp3"},
   {id:"happy",        pad:null,key:null,name:"Piosenka „Happy” — Pharrell Williams", file:null}
 ];
 const byId = Object.fromEntries(CUES.map(c => [c.id, c]));
@@ -672,7 +672,7 @@ window.addEventListener("keydown", e => {
   if(e.key==="ArrowDown" || e.key==="ArrowRight"){ e.preventDefault(); moveArmed(1); return; }
   if(e.key==="ArrowUp" || e.key==="ArrowLeft"){ e.preventDefault(); moveArmed(-1); return; }
   if(e.key==="Escape"){ e.preventDefault(); stopAll(); return; }
-  const c = CUES.find(c => c.key === e.key);
+  const c = CUES.find(c => c.key === e.key.toLowerCase());
   if(c){ e.preventDefault(); trigger(c.id); }
 });
 
