@@ -1,0 +1,756 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Konsola dźwięków — Szkoła oczami uczniów (4c)</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🎚️</text></svg>">
+<style>
+  :root{
+    --bg:#0e1014; --panel:#171a21; --panel2:#1f232c; --line:#2b313d;
+    --text:#e7e9ee; --muted:#98a2b3; --who:#5cc8ff;
+    --accent:#f6a93b; --armed:#37d67a; --play:#ff5c7a;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  kbd{
+    font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    background:#0c0e12; border:1px solid var(--line); border-bottom-width:2px;
+    border-radius:5px; padding:3px 6px; color:var(--text); display:inline-block;
+  }
+  button{font:inherit; cursor:pointer;}
+
+  /* ---- top bar ---- */
+  .topbar{
+    display:flex; align-items:center; gap:18px;
+    padding:10px 18px; background:var(--panel); border-bottom:1px solid var(--line);
+    flex:0 0 auto;
+  }
+  .topbar h1{font-size:16px; margin:0; font-weight:700; white-space:nowrap;}
+  .topbar h1 span{color:var(--muted); font-weight:400;}
+  .spacer{flex:1;}
+  .vol{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px;}
+  .vol input{width:120px; accent-color:var(--accent);}
+  .badge{
+    font-size:12px; color:var(--muted); background:var(--panel2);
+    border:1px solid var(--line); border-radius:20px; padding:4px 10px; white-space:nowrap;
+  }
+  .badge.ok{color:var(--armed); border-color:#225c3c;}
+
+  /* ---- layout ---- */
+  main{flex:1; display:flex; min-height:0;}
+  .script-col{flex:1; display:flex; flex-direction:column; min-width:0; border-right:1px solid var(--line);}
+  .rail{
+    flex:0 0 372px; overflow-y:auto; padding:14px; background:var(--panel);
+    display:flex; flex-direction:column; gap:14px;
+  }
+
+  /* ---- script toolbar ---- */
+  .script-toolbar{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:9px 16px; background:var(--panel); border-bottom:1px solid var(--line);
+    flex:0 0 auto;
+  }
+  .btn{
+    background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    border-radius:8px; padding:7px 12px; font-size:13px; font-weight:600;
+  }
+  .btn:hover{border-color:#3c4453;}
+  .btn.primary{background:var(--accent); color:#1a1300; border-color:var(--accent);}
+  .btn.toggled{background:#33405a; border-color:#4a6;}
+  .toolbar-hint{color:var(--muted); font-size:12.5px;}
+
+  /* ---- script ---- */
+  .script{
+    flex:1; overflow-y:auto; padding:30px 24px 60vh;
+  }
+  .script-inner{max-width:680px; margin:0 auto;}
+  .script[contenteditable="true"]{outline:none; background:#101826;}
+  .script[contenteditable="true"] .script-inner{
+    box-shadow:0 0 0 1px #2e4a6e inset; border-radius:10px; padding:18px;
+  }
+
+  .kicker{color:var(--muted); font-size:13px; font-style:italic; margin:0 0 10px;}
+  .play-title{
+    font-size:30px; line-height:1.2; margin:0 0 14px; font-weight:800;
+    background:linear-gradient(90deg,#f6a93b,#ff5c7a); -webkit-background-clip:text;
+    background-clip:text; color:transparent;
+  }
+  .obsada{
+    font-size:13.5px; color:var(--muted); border:1px solid var(--line);
+    border-radius:10px; padding:10px 12px; margin-bottom:8px;
+  }
+  .obsada b{color:var(--text);}
+  .obsada .you{color:var(--accent); font-weight:700;}
+  hr.div{border:none; border-top:1px solid var(--line); margin:26px 0;}
+
+  .script h2{
+    font-size:13px; letter-spacing:.13em; text-transform:uppercase;
+    color:var(--accent); margin:34px 0 12px; font-weight:800;
+  }
+  .line{margin:9px 0; font-size:17px; line-height:1.7;}
+  .who{color:var(--who); font-weight:700;}
+  .paren{color:var(--muted); font-weight:400; font-style:italic; font-size:.93em;}
+  .stage{
+    margin:9px 0; color:var(--muted); font-style:italic; font-size:14.5px;
+    padding-left:12px; border-left:2px solid var(--line);
+  }
+  .narrator{
+    border-left:3px solid #3a4a6a; padding:6px 0 6px 14px; margin:6px 0;
+  }
+  .narrator .who{color:#9db4ff;}
+
+  /* ---- cue chip (in script) ---- */
+  .cue-line{text-align:center; margin:16px 0;}
+  .cue{
+    display:inline-flex; align-items:center; gap:9px; vertical-align:middle;
+    background:rgba(246,169,59,.12); border:1.5px solid var(--accent);
+    color:var(--accent); border-radius:999px; padding:6px 12px 6px 7px;
+    font-size:13.5px; font-weight:700; cursor:pointer; user-select:none;
+    transition:transform .07s, box-shadow .15s;
+  }
+  .cue:hover{transform:translateY(-1px);}
+  .cue .num{
+    background:var(--accent); color:#1a1300; font-weight:800;
+    width:22px; height:22px; border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center; font-size:12px;
+  }
+  .cue .cue-key{
+    background:#0c0e12; border:1px solid var(--accent); border-radius:5px;
+    padding:2px 6px; font:600 11px ui-monospace,Menlo,monospace; color:var(--accent);
+  }
+  .cue.unassigned{
+    background:rgba(152,162,179,.1); border-color:var(--line); color:var(--muted);
+  }
+  .cue.unassigned .num{background:var(--muted); color:#15171c;}
+  .cue.armed{
+    border-color:var(--armed); color:var(--armed);
+    box-shadow:0 0 0 4px rgba(55,214,122,.18); animation:pulse 1.6s infinite;
+  }
+  .cue.armed .num{background:var(--armed); color:#06210f;}
+  .cue.armed .cue-key{border-color:var(--armed); color:var(--armed);}
+  .cue.playing{
+    border-color:var(--play); color:var(--play);
+    box-shadow:0 0 22px rgba(255,92,122,.5);
+  }
+  .cue.playing .num{background:var(--play); color:#2a0010;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(55,214,122,.18);}50%{box-shadow:0 0 0 8px rgba(55,214,122,.05);}}
+
+  /* ---- rail: armed banner ---- */
+  .panel{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:13px;}
+  .armed-banner{border-color:#2c5c40; background:linear-gradient(180deg,#1a2a20,#1b1f27);}
+  .armed-banner .label{font-size:11px; letter-spacing:.14em; color:var(--armed); font-weight:800;}
+  .armed-row{display:flex; align-items:center; gap:11px; margin:8px 0 4px;}
+  .armed-num{
+    flex:0 0 auto; width:42px; height:42px; border-radius:11px;
+    background:var(--armed); color:#06210f; font-weight:800; font-size:20px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .armed-num.none{background:var(--muted); color:#15171c; font-size:15px;}
+  .armed-name{font-size:18px; font-weight:800; line-height:1.2;}
+  .armed-sub{font-size:12.5px; color:var(--muted);}
+  .armed-sub b{color:var(--text);}
+  .play-next{
+    width:100%; margin-top:10px; padding:12px; font-size:15px; font-weight:800;
+    background:var(--armed); color:#06210f; border:none; border-radius:9px;
+  }
+  .play-next:hover{filter:brightness(1.08);}
+  .nav-row{display:flex; gap:8px; margin-top:8px;}
+  .nav-row .btn{flex:1; text-align:center;}
+
+  /* ---- now playing ---- */
+  .nowplaying .np-head{display:flex; justify-content:space-between; align-items:baseline;}
+  .np-title{font-size:11px; letter-spacing:.12em; color:var(--muted); font-weight:800;}
+  .np-name{font-size:15px; font-weight:700; margin:5px 0;}
+  .np-name.idle{color:var(--muted); font-weight:400; font-style:italic;}
+  .progress{height:7px; background:#0c0e12; border-radius:4px; overflow:hidden;}
+  .progress i{display:block; height:100%; width:0; background:var(--play); border-radius:4px;}
+  .np-time{font:11px ui-monospace,Menlo,monospace; color:var(--muted); margin-top:4px;}
+  .stop-btn{width:100%; margin-top:9px;}
+
+  /* ---- pad grid ---- */
+  .section-title{font-size:11px; letter-spacing:.12em; color:var(--muted); font-weight:800; margin:2px 0;}
+  .pads{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .pad{
+    position:relative; overflow:hidden; text-align:left;
+    background:var(--panel2); border:1px solid var(--line); border-radius:10px;
+    padding:8px 9px; color:var(--text); display:flex; flex-direction:column; gap:3px;
+  }
+  .pad:hover{border-color:#3c4453;}
+  .pad .pad-top{display:flex; align-items:center; gap:7px;}
+  .pad .pad-key{
+    background:#0c0e12; border:1px solid var(--accent); border-bottom-width:2px;
+    border-radius:6px; min-width:24px; text-align:center;
+    padding:3px 5px; font:700 13px ui-monospace,Menlo,monospace; color:var(--accent);
+  }
+  .pad .pad-no{font-size:11px; color:var(--muted);}
+  .pad .pad-name{font-size:12.5px; font-weight:600; line-height:1.25;}
+  .pad.armed{border-color:var(--armed); box-shadow:0 0 0 2px rgba(55,214,122,.25);}
+  .pad.playing{border-color:var(--play); box-shadow:0 0 16px rgba(255,92,122,.4);}
+  .pad.error{opacity:.45;}
+  .pad.error .pad-name::after{content:" — błąd pliku"; color:var(--play);}
+  .pad-bar{position:absolute; left:0; bottom:0; height:3px; width:100%; background:transparent;}
+  .pad-bar i{display:block; height:100%; width:0; background:var(--play);}
+
+  /* ---- unassigned ---- */
+  .unassigned-list{display:flex; flex-direction:column; gap:7px;}
+  .ua-item{
+    display:flex; align-items:center; gap:8px;
+    background:var(--panel2); border:1px dashed var(--line); border-radius:9px; padding:7px 9px;
+  }
+  .ua-name{flex:1; font-size:12.5px;}
+  .ua-name small{color:var(--muted); display:block;}
+  .ua-item.loaded{border-style:solid; border-color:#2c5c40;}
+  .ua-item.loaded .ua-name small{color:var(--armed);}
+  .file-btn{
+    font-size:11.5px; padding:5px 8px; background:var(--panel); border:1px solid var(--line);
+    border-radius:7px; color:var(--text); white-space:nowrap;
+  }
+  .file-btn:hover{border-color:var(--accent);}
+  .ua-play{
+    font-size:13px; padding:5px 9px; border-radius:7px; border:1px solid var(--line);
+    background:var(--panel); color:var(--muted);
+  }
+  .ua-item.loaded .ua-play{color:var(--armed); border-color:#2c5c40; cursor:pointer;}
+
+  /* ---- help ---- */
+  .help{font-size:12px; color:var(--muted); line-height:2;}
+  .help kbd{margin:0 1px;}
+  .edit-warn{
+    background:#3a2a12; border:1px solid #6a4a1c; color:#f6c97a;
+    border-radius:9px; padding:9px 11px; font-size:12.5px; display:none;
+  }
+  body.editing .edit-warn{display:block;}
+
+  ::-webkit-scrollbar{width:11px;}
+  ::-webkit-scrollbar-thumb{background:#2b313d; border-radius:6px; border:3px solid var(--bg);}
+  .rail::-webkit-scrollbar-thumb{border-color:var(--panel);}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1>🎚️ Konsola dźwięków <span>· Dzień Dziecka 4c</span></h1>
+  <div class="spacer"></div>
+  <label class="vol">🔊 Głośność
+    <input id="vol" type="range" min="0" max="100" value="90">
+  </label>
+  <span id="loaded" class="badge">Ładowanie dźwięków…</span>
+</header>
+
+<main>
+  <section class="script-col">
+    <div class="script-toolbar">
+      <button id="editToggle" class="btn">✏️ Tryb edycji</button>
+      <button id="resetBtn" class="btn">↺ Przywróć oryginalny tekst</button>
+      <span class="toolbar-hint" id="toolbarHint">Tryb występu — skróty klawiszowe są aktywne.</span>
+    </div>
+
+    <div class="script" id="script">
+     <div class="script-inner">
+      <p class="kicker">Propozycja krótkich skeczy w ramach prezentu z okazji Dnia Dziecka — od rodziców i wychowawczyni dla uczniów klasy 4c.</p>
+      <h1 class="play-title">Szkoła oczami uczniów<br>…czyli totalny chaos!</h1>
+      <p class="obsada"><b>Obsada:</b> Nauczyciel (poważny!) · Uczeń 1 · Uczeń 2 · Uczeń 3 · Uczeń 4 · Uczeń 5 · Narrator · <span class="you">Dźwięki — to Ty 🎚️</span></p>
+
+      <hr class="div">
+      <h2>Wstęp</h2>
+      <div class="narrator">
+        <p class="line"><span class="who">Narrator:</span></p>
+        <p class="line">Dzień dobry wszystkim! Drodzy uczniowie i rodzice…</p>
+        <p class="line">Dzisiejszy dzień jest wyjątkowy. Wiecie czemu?</p>
+      </div>
+      <p class="stage">(pewnie padnie odpowiedź, bo jest Dzień Dziecka)</p>
+      <div class="narrator">
+        <p class="line">Nie tylko! Bo wreszcie, po długich tygodniach ukrywania przed wami… możemy wam zdradzić pewien sekret. Mamy dla was niespodziankę.</p>
+        <p class="line">Właśnie w tym wyjątkowym dniu rodzice i pani Paulina postanowili wspólnie zrobić coś szalonego. Macie pomysł, co to może być?</p>
+      </div>
+      <p class="stage">(dzieci coś pewnie będą wykrzykiwać)</p>
+      <div class="narrator">
+        <p class="line">Role się odwrócą i teraz to oni zmierzą się ze szkolną rzeczywistością, której wy na co dzień doświadczacie.</p>
+        <p class="line">Zapraszamy na spektakl: <em>Szkoła oczami uczniów… czyli totalny chaos!</em></p>
+      </div>
+
+      <hr class="div">
+      <h2>Skecz 1 — powitanie</h2>
+      <p class="line"><span class="who">Nauczyciel:</span> Dzień dobry, klaso!</p>
+      <p class="stage">Uczniowie nie reagują, rozmawiają między sobą, ganiają się po klasie, rzucają się czymś – chaos!</p>
+      <p class="line"><span class="who">Nauczyciel <span class="paren">(lekko zirytowany)</span>:</span> Dzień dobry!</p>
+      <p class="stage">Nadal uczniowie nie reagują, rozmawiają między sobą, ganiają się po klasie, rzucają się czymś – chaos!</p>
+      <p class="cue-line"><span class="cue" data-cue="crickets" contenteditable="false"></span></p>
+      <p class="line"><span class="who">Nauczyciel <span class="paren">(głośno)</span>:</span> DZIEŃ DOBRY!</p>
+      <p class="line"><span class="who">Uczniowie:</span> Dzieeeeeeeeń dooooo brrryyyyyy</p>
+
+      <hr class="div">
+      <h2>Skecz 2 — obecność</h2>
+      <p class="line"><span class="who">Nauczyciel:</span> Siadajcie, chcę sprawdzić obecność.</p>
+      <p class="stage">Ktoś się chowa pod ławką.</p>
+      <p class="line"><span class="who">Uczeń:</span> Proszę pani/pana, a ona/on się chowa!</p>
+      <p class="line"><span class="who">Uczeń <span class="paren">(spod ławki)</span>:</span> Czego skarżysz! Jaki bambik!</p>
+      <p class="line"><span class="who">Nauczyciel:</span> Uspokójcie się. IMIĘ?</p>
+      <p class="line"><span class="who">Uczeń:</span> Obecny… fizycznie.</p>
+      <p class="line"><span class="who">Nauczyciel:</span> IMIĘ UCZEŃ?</p>
+      <p class="line"><span class="who">Uczeń <span class="paren">(prześmiewczo)</span>:</span> Nie ma.</p>
+      <p class="line"><span class="who">Uczeń <span class="paren">(wpada zdyszany)</span>:</span> Mama zaspała i budzik jej nie zadzwonił. To wszystko jej wina!</p>
+      <p class="cue-line"><span class="cue" data-cue="wah" contenteditable="false"></span></p>
+
+      <hr class="div">
+      <h2>Skecz 3 — początek</h2>
+      <p class="line"><span class="who">Nauczyciel:</span> Proszę wyjąć zeszyty.</p>
+      <p class="cue-line"><span class="cue" data-cue="alert" contenteditable="false"></span></p>
+      <p class="line"><span class="who">Uczeń:</span> Nie mam zeszytu…</p>
+      <p class="line"><span class="who">Uczeń:</span> Ale mój został w szafce. Mogę iść do szatni?</p>
+      <p class="line"><span class="who">Uczeń:</span> A mogę jeszcze zgłosić nieprzygotowanie?</p>
+      <p class="line"><span class="who">Nauczyciel:</span> Za późno.</p>
+      <p class="cue-line"><span class="cue" data-cue="ohno" contenteditable="false"></span></p>
+      <p class="line"><span class="who">Nauczyciel:</span> Sprawdzamy zadanie z wczorajszej lekcji.</p>
+      <p class="line"><span class="who">Uczeń:</span> Ale, bo ja dokończył/m… ale zostawił/m w domu!</p>
+      <p class="line"><span class="who">Uczeń:</span> A to było na ocenę?!</p>
+      <p class="line"><span class="who">Nauczyciel:</span> Nie.</p>
+      <p class="line"><span class="who">Uczniowie:</span> Ufff.</p>
+      <p class="line"><span class="who">Nauczyciel:</span> A może jednak wstawię wam z tego oceny.</p>
+      <p class="cue-line"><span class="cue" data-cue="vineboom" contenteditable="false"></span></p>
+      <p class="line"><span class="who">Uczeń:</span> TO NIE FAIR!</p>
+      <p class="line"><span class="who">Uczeń:</span> TO JEST SCAM!</p>
+      <p class="line"><span class="who">Uczeń:</span> Ale pan/i nie może!</p>
+      <p class="line"><span class="who">Nauczyciel:</span> Mogę.</p>
+      <p class="cue-line"><span class="cue" data-cue="badtothebone" contenteditable="false"></span></p>
+
+      <hr class="div">
+      <h2>Skecz 4 — podręcznik</h2>
+      <p class="line"><span class="who">Nauczyciel:</span> Proszę, otwórzcie podręcznik na stronie… <span class="paren">(zawahanie i zrezygnowanie)</span> sześćdziesiątej siódmej.</p>
+      <p class="line"><span class="who">Uczniowie:</span> SIX-SEVEN <span class="paren">(z odpowiednim gestem)</span></p>
+      <p class="line"><span class="who">Uczeń:</span> Zaraz mnie wybombi!</p>
+      <p class="line"><span class="who">Nauczyciel:</span> Kto zrobi zadanie pierwsze?</p>
+      <p class="stage">Uczniowie nie nawiązują kontaktu wzrokowego, zajmują się czymś innym.</p>
+      <p class="cue-line"><span class="cue" data-cue="sneaky" contenteditable="false"></span></p>
+      <p class="line"><span class="who">Nauczyciel:</span> Dobrze, zapraszam IMIĘ.</p>
+      <p class="line"><span class="who">Uczeń:</span> To nie fair! To nie mój quest.</p>
+      <p class="line"><span class="who">Uczeń:</span> Proszę pan/i, to jest wild.</p>
+      <p class="cue-line"><span class="cue" data-cue="muzyczka" contenteditable="false"></span></p>
+
+      <hr class="div">
+      <h2>Skecz 5 — toaleta</h2>
+      <p class="line"><span class="who">Uczeń:</span> Proszę pan/i, mogę iść do toalety?</p>
+      <p class="line"><span class="who">Nauczyciel:</span> A co robiłeś na przerwie?</p>
+      <p class="line"><span class="who">Uczeń:</span> Ale to sytuacja krytyczna.</p>
+      <p class="line"><span class="who">Nauczyciel:</span> Idź.</p>
+      <p class="line"><span class="who">Uczeń:</span> A mogę iść po nim?</p>
+      <p class="line"><span class="who">Uczeń:</span> I ja?</p>
+      <p class="line"><span class="who">Uczeń:</span> A potem ja?</p>
+      <p class="cue-line"><span class="cue" data-cue="disgusting" contenteditable="false"></span></p>
+
+      <hr class="div">
+      <h2>Skecz 6 — lekcja</h2>
+      <p class="line"><span class="who">Nauczyciel:</span> Dobrze, zrobimy krótkie ćwiczenie…</p>
+      <p class="line"><span class="who">Uczeń:</span> A musimy?</p>
+      <p class="line"><span class="who">Uczeń:</span> Ale ja się dziś nie wyspał/m…</p>
+      <p class="line"><span class="who">Uczniowie:</span> To na ocenę?!</p>
+      <p class="line"><span class="who">Nauczyciel:</span> Nie.</p>
+      <p class="line"><span class="who">Uczeń:</span> Eeee, to nie robię.</p>
+      <p class="cue-line"><span class="cue" data-cue="badumtss" contenteditable="false"></span></p>
+      <p class="line"><span class="who">Nauczyciel:</span> Czy wszyscy rozumieją?</p>
+      <p class="line"><span class="who">Uczniowie:</span> TAK!</p>
+      <p class="line"><span class="who">Nauczyciel:</span> IMIĘ, to wytłumacz klasie.</p>
+      <p class="line"><span class="who">Uczeń:</span> Ja rozumiem… ale nie umiem powiedzieć.</p>
+      <p class="line"><span class="who">Uczeń:</span> Bez sensu totalnie…</p>
+      <p class="line"><span class="who">Uczeń:</span> To bait!</p>
+      <p class="cue-line"><span class="cue" data-cue="wellwellwell" contenteditable="false"></span></p>
+
+      <hr class="div">
+      <h2>Skecz 7 — dzwonek</h2>
+      <p class="line"><span class="who">Uczeń:</span> Proszę pan/i, za ile dzwonek?</p>
+      <p class="line"><span class="who">Nauczyciel:</span> Tam jest zegar.</p>
+      <p class="line"><span class="who">Uczeń:</span> A ile jeszcze zostało?</p>
+      <p class="line"><span class="who">Nauczyciel:</span> Proszę się skupić na lekcji.</p>
+      <p class="cue-line"><span class="cue" data-cue="fiveminutes" contenteditable="false"></span></p>
+      <p class="line"><span class="who">Uczeń:</span> A za ile koniec lekcji?</p>
+
+      <hr class="div">
+      <h2>Skecz 8 — koniec lekcji</h2>
+      <p class="stage">Nauczyciel coś notuje, uczniowie patrzą na zegar.</p>
+      <p class="line"><span class="who">Uczeń <span class="paren">(szeptem)</span>:</span> 10, 9, 8…</p>
+      <p class="stage">Uczniowie się już pakują.</p>
+      <p class="cue-line"><span class="cue" data-cue="dzwonek" contenteditable="false"></span></p>
+      <p class="line"><span class="who">Uczeń:</span> WOLNOŚĆ!</p>
+      <p class="stage">(Uczniowie rzucają papierki, rozrzucają krzesła i „wybiegają” z klasy.)</p>
+      <p class="cue-line"><span class="cue" data-cue="yeahbaby" contenteditable="false"></span></p>
+
+      <hr class="div">
+      <h2>Zakończenie</h2>
+      <div class="narrator">
+        <p class="line"><span class="who">Narrator:</span></p>
+        <p class="line">Drodzy, ten występ to coś więcej niż tylko żarty i skecze. To czas, który wasi rodzice i pani Paulina poświęcili specjalnie dla was. Żebyście mogli trochę się pośmiać, ale przede wszystkim, żebyście poczuli, że jesteście dla nich ważni.</p>
+        <p class="line">Życzymy wam, żebyście zawsze mieli w sobie tyle radości, ile dzisiaj! Żeby szkoła była nie tylko miejscem nauki, ale również śmiechu, przyjaźni i takich chwil jak ta!</p>
+        <p class="line">Wielkie brawa dla wszystkich aktorów – za odwagę, pomysłowość i odrobinę szaleństwa! Udanego Dnia Dziecka!</p>
+      </div>
+      <p class="cue-line"><span class="cue" data-cue="happy" contenteditable="false"></span></p>
+     </div>
+    </div>
+  </section>
+
+  <aside class="rail">
+    <div class="panel armed-banner">
+      <div class="label">▸ NASTĘPNY DŹWIĘK</div>
+      <div class="armed-row">
+        <div id="armedNum" class="armed-num">1</div>
+        <div>
+          <div id="armedName" class="armed-name">—</div>
+          <div id="armedSub" class="armed-sub"></div>
+        </div>
+      </div>
+      <button id="playNext" class="play-next">▶ Zagraj &nbsp;·&nbsp; Spacja</button>
+      <div class="nav-row">
+        <button class="btn" id="prevBtn">↑ Poprzedni</button>
+        <button class="btn" id="nextBtn">Następny ↓</button>
+        <button class="btn" id="rewindBtn" title="Wróć na początek">⟲</button>
+      </div>
+    </div>
+
+    <div class="panel nowplaying">
+      <div class="np-head"><span class="np-title">TERAZ GRA</span></div>
+      <div id="npName" class="np-name idle">— cisza —</div>
+      <div class="progress"><i id="npBar"></i></div>
+      <div id="npTime" class="np-time">0:00 / 0:00</div>
+      <button id="stopBtn" class="btn stop-btn">■ Zatrzymaj wszystko &nbsp;·&nbsp; Esc</button>
+    </div>
+
+    <div class="edit-warn">✏️ <b>Tryb edycji włączony.</b> Skróty klawiszowe są wyłączone, żebyś mógł pisać. Kliknij dźwięk, aby go przetestować. Zmiany zapisują się automatycznie.</div>
+
+    <div>
+      <div class="section-title">PADY — kliknij lub naciśnij klawisz</div>
+      <div class="pads" id="pads"></div>
+    </div>
+
+    <div>
+      <div class="section-title">DO ODTWORZENIA RĘCZNIE (brak gotowego pliku)</div>
+      <div class="unassigned-list" id="unassigned"></div>
+    </div>
+
+    <div class="panel help">
+      <b style="color:var(--text)">Skróty klawiszowe</b><br>
+      <kbd>Spacja</kbd>/<kbd>Enter</kbd> — zagraj następny dźwięk z listy<br>
+      <kbd>↑</kbd> <kbd>↓</kbd> — przesuń wskaźnik bez grania<br>
+      <kbd>1</kbd>…<kbd>9</kbd> <kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd> — zagraj konkretny pad<br>
+      <kbd>Esc</kbd> — natychmiast zatrzymaj wszystko
+    </div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+
+/* ---- Konfiguracja: wszystkie sygnały dźwiękowe w kolejności scenariusza ---- */
+const CUES = [
+  {id:"crickets",     pad:1,  key:"1", name:"Crickets (cisza)",      file:"samples/01_crickets.mp3"},
+  {id:"wah",          pad:2,  key:"2", name:"Wah Wah Wah",           file:"samples/02_wah-wah-wah.mp3"},
+  {id:"alert",        pad:3,  key:"3", name:"Alert",                 file:"samples/03_alert.mp3"},
+  {id:"ohno",         pad:4,  key:"4", name:"Oh No, No, No",         file:"samples/oh-no.mp3"},
+  {id:"vineboom",     pad:5,  key:"5", name:"Vine Boom",             file:"samples/04_vine-boom.mp3"},
+  {id:"badtothebone", pad:6,  key:"6", name:"Bad to the Bone",       file:"samples/05_bad-to-the-bone.mp3"},
+  {id:"sneaky",       pad:7,  key:"7", name:"Sneaky Snitch (~30 s)", file:"samples/sneaky-snitch.mp3"},
+  {id:"muzyczka",     pad:null,key:null,name:"Muzyczka",             file:null},
+  {id:"disgusting",   pad:8,  key:"8", name:"Spongebob Disgusting",  file:"samples/disgusting.mp3"},
+  {id:"badumtss",     pad:9,  key:"9", name:"Ba Dum Tss",            file:"samples/badumtss.mp3"},
+  {id:"wellwellwell", pad:null,key:null,name:"Well, Well, Well",     file:null},
+  {id:"fiveminutes",  pad:10, key:"0", name:"5 Minutes Later",       file:"samples/5-minutes-later.mp3"},
+  {id:"dzwonek",      pad:11, key:"-", name:"Dzwonek szkolny",       file:"samples/school-bell.mp3"},
+  {id:"yeahbaby",     pad:12, key:"=", name:"Woo Yeah Baby",         file:"samples/woo-yeah-baby.mp3"},
+  {id:"happy",        pad:null,key:null,name:"Piosenka „Happy” — Pharrell Williams", file:null}
+];
+const byId = Object.fromEntries(CUES.map(c => [c.id, c]));
+
+/* ---- Stan ---- */
+const audio = {};            // id -> HTMLAudioElement
+let armed = 0;               // indeks w CUES
+let editMode = false;
+let masterVol = 0.9;
+let playingId = null;
+const LS = {script:"dd4c_script_v1", armed:"dd4c_armed", vol:"dd4c_vol"};
+
+/* ---- Elementy ---- */
+const $ = s => document.querySelector(s);
+const scriptEl = $("#script");
+const ORIGINAL_HTML = scriptEl.innerHTML;
+
+/* ================= Audio ================= */
+function buildAudio(){
+  let total = 0, ready = 0;
+  CUES.forEach(c => {
+    if(!c.file) return;
+    total++;
+    const a = new Audio(c.file);
+    a.preload = "auto";
+    a.volume = masterVol;
+    a.addEventListener("canplaythrough", () => { if(!a._ok){a._ok=true; ready++; updateLoaded(ready,total);} }, {once:true});
+    a.addEventListener("error", () => markError(c.id));
+    a.addEventListener("timeupdate", () => onTimeUpdate(c));
+    a.addEventListener("ended", () => { if(playingId===c.id) clearPlaying(); });
+    audio[c.id] = a;
+  });
+  updateLoaded(ready, total);
+}
+function updateLoaded(r,t){
+  const b = $("#loaded");
+  if(r>=t){ b.textContent = "✓ Dźwięki gotowe ("+t+"/"+t+")"; b.classList.add("ok"); }
+  else b.textContent = "Ładowanie dźwięków… "+r+"/"+t;
+}
+function markError(id){
+  const c = byId[id];
+  if(c && c.pad){ const p = document.querySelector('.pad[data-id="'+id+'"]'); if(p) p.classList.add("error"); }
+}
+
+/* ================= Odtwarzanie ================= */
+function stopAll(){
+  Object.values(audio).forEach(a => { a.pause(); a.currentTime = 0; });
+  clearPlaying();
+}
+function clearPlaying(){
+  playingId = null;
+  document.querySelectorAll(".cue.playing,.pad.playing").forEach(e => e.classList.remove("playing"));
+  document.querySelectorAll(".pad-bar i").forEach(i => i.style.width = "0");
+  $("#npName").textContent = "— cisza —";
+  $("#npName").classList.add("idle");
+  $("#npBar").style.width = "0";
+  $("#npTime").textContent = "0:00 / 0:00";
+}
+
+/* Zagraj dany sygnał. Ustawia wskaźnik na następny. */
+function trigger(id){
+  const c = byId[id];
+  if(!c) return;
+  const idx = CUES.indexOf(c);
+  armed = Math.min(idx + 1, CUES.length - 1);
+  updateArmed();
+
+  // czysty start — jeden dźwięk na raz na scenie
+  Object.values(audio).forEach(a => { a.pause(); a.currentTime = 0; });
+  document.querySelectorAll(".cue.playing,.pad.playing").forEach(e => e.classList.remove("playing"));
+  document.querySelectorAll(".pad-bar i").forEach(i => i.style.width = "0");
+
+  const a = audio[id];
+  if(!a){
+    // brak pliku — krótkie mignięcie i informacja
+    playingId = null;
+    $("#npName").textContent = "♪ " + c.name + " — odtwórz ręcznie";
+    $("#npName").classList.remove("idle");
+    $("#npBar").style.width = "0";
+    $("#npTime").textContent = "0:00 / 0:00";
+    const chips = document.querySelectorAll('.cue[data-cue="'+id+'"]');
+    chips.forEach(el => el.classList.add("playing"));
+    setTimeout(() => chips.forEach(el => el.classList.remove("playing")), 900);
+    return;
+  }
+
+  a.currentTime = 0;
+  a.volume = masterVol;
+  const pr = a.play();
+  if(pr && pr.catch) pr.catch(() => { $("#npName").textContent = "⚠ Kliknij stronę, aby odblokować dźwięk"; });
+
+  playingId = id;
+  document.querySelectorAll('.cue[data-cue="'+id+'"]').forEach(el => el.classList.add("playing"));
+  const pad = document.querySelector('.pad[data-id="'+id+'"]'); if(pad) pad.classList.add("playing");
+  $("#npName").textContent = "♪ " + c.name;
+  $("#npName").classList.remove("idle");
+}
+function fireArmed(){ trigger(CUES[armed].id); }
+
+function onTimeUpdate(c){
+  if(playingId !== c.id) return;
+  const a = audio[c.id];
+  if(!a.duration) return;
+  const pct = (a.currentTime / a.duration) * 100;
+  $("#npBar").style.width = pct + "%";
+  $("#npTime").textContent = fmt(a.currentTime) + " / " + fmt(a.duration);
+  const pad = document.querySelector('.pad[data-id="'+c.id+'"] .pad-bar i');
+  if(pad) pad.style.width = pct + "%";
+}
+function fmt(s){ s = Math.max(0,Math.floor(s||0)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
+
+/* ================= Wskaźnik „następny” ================= */
+function moveArmed(d){
+  armed = Math.max(0, Math.min(CUES.length-1, armed + d));
+  updateArmed();
+}
+function updateArmed(){
+  document.querySelectorAll(".cue.armed,.pad.armed").forEach(e => e.classList.remove("armed"));
+  const c = CUES[armed];
+  document.querySelectorAll('.cue[data-cue="'+c.id+'"]').forEach(el => {
+    el.classList.add("armed");
+    if(!editMode) el.scrollIntoView({block:"center", behavior:"smooth"});
+  });
+  const pad = document.querySelector('.pad[data-id="'+c.id+'"]'); if(pad) pad.classList.add("armed");
+
+  const numEl = $("#armedNum");
+  numEl.textContent = c.pad ? c.pad : "♪";
+  numEl.classList.toggle("none", !c.pad);
+  $("#armedName").textContent = c.name;
+
+  const next = CUES[armed+1];
+  let sub = c.pad ? ("klawisz "+keyLabel(c.key)) : "brak pliku — zagraj ręcznie";
+  if(next) sub += " &nbsp;·&nbsp; potem: <b>" + next.name + "</b>";
+  $("#armedSub").innerHTML = sub;
+
+  localStorage.setItem(LS.armed, String(armed));
+}
+function keyLabel(k){ return k==="-"?"−":k; }
+
+/* ================= Budowa padów ================= */
+function buildPads(){
+  const wrap = $("#pads");
+  CUES.filter(c => c.pad).sort((a,b)=>a.pad-b.pad).forEach(c => {
+    const b = document.createElement("button");
+    b.className = "pad"; b.dataset.id = c.id;
+    b.innerHTML =
+      '<div class="pad-top"><span class="pad-key">'+keyLabel(c.key)+'</span>'+
+      '<span class="pad-no">pad '+c.pad+'</span></div>'+
+      '<span class="pad-name">'+c.name+'</span>'+
+      '<span class="pad-bar"><i></i></span>';
+    b.addEventListener("click", () => { trigger(c.id); b.blur(); });
+    wrap.appendChild(b);
+  });
+}
+
+/* ================= Sygnały bez pliku ================= */
+function buildUnassigned(){
+  const wrap = $("#unassigned");
+  CUES.filter(c => !c.file).forEach(c => {
+    const row = document.createElement("div");
+    row.className = "ua-item"; row.dataset.id = c.id;
+    row.innerHTML =
+      '<button class="ua-play" title="Zagraj">▶</button>'+
+      '<span class="ua-name">'+c.name+'<small>brak pliku</small></span>'+
+      '<label class="file-btn">wgraj plik…<input type="file" accept="audio/*" hidden></label>';
+    const input = row.querySelector("input");
+    input.addEventListener("change", e => {
+      const f = e.target.files[0]; if(!f) return;
+      const a = new Audio(URL.createObjectURL(f));
+      a.preload = "auto"; a.volume = masterVol;
+      a.addEventListener("timeupdate", () => onTimeUpdate(c));
+      a.addEventListener("ended", () => { if(playingId===c.id) clearPlaying(); });
+      audio[c.id] = a;
+      row.classList.add("loaded");
+      row.querySelector("small").textContent = "✓ " + f.name;
+      hydrateCues();
+      updateArmed();
+    });
+    row.querySelector(".ua-play").addEventListener("click", () => trigger(c.id));
+    wrap.appendChild(row);
+  });
+}
+
+/* ================= Chipy w scenariuszu ================= */
+function hydrateCues(){
+  scriptEl.querySelectorAll(".cue").forEach(el => {
+    const c = byId[el.dataset.cue];
+    if(!c) return;
+    el.contentEditable = "false";
+    el.classList.remove("armed","playing");
+    const playable = !!audio[c.id];
+    el.classList.toggle("unassigned", !playable);
+    if(c.pad){
+      el.innerHTML = '<span class="num">'+c.pad+'</span>♪ '+c.name+
+                     ' <span class="cue-key">'+keyLabel(c.key)+'</span>';
+    } else {
+      el.innerHTML = '<span class="num">♪</span>'+c.name+
+                     ' <span class="cue-key">'+(playable?"wgrano":"ręcznie")+'</span>';
+    }
+  });
+}
+
+/* ================= Klawiatura ================= */
+window.addEventListener("keydown", e => {
+  if(e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target;
+  if(editMode || (t && (t.tagName==="INPUT" || t.tagName==="TEXTAREA" || t.isContentEditable))) return;
+
+  if(e.key===" " || e.key==="Enter"){ e.preventDefault(); fireArmed(); return; }
+  if(e.key==="ArrowDown" || e.key==="ArrowRight"){ e.preventDefault(); moveArmed(1); return; }
+  if(e.key==="ArrowUp" || e.key==="ArrowLeft"){ e.preventDefault(); moveArmed(-1); return; }
+  if(e.key==="Escape"){ e.preventDefault(); stopAll(); return; }
+  const c = CUES.find(c => c.key === e.key);
+  if(c){ e.preventDefault(); trigger(c.id); }
+});
+
+/* ================= Tryb edycji ================= */
+function setEditMode(on){
+  editMode = on;
+  document.body.classList.toggle("editing", on);
+  scriptEl.contentEditable = on ? "true" : "false";
+  scriptEl.querySelectorAll(".cue").forEach(el => el.contentEditable = "false");
+  const btn = $("#editToggle");
+  btn.textContent = on ? "🎭 Wróć do trybu występu" : "✏️ Tryb edycji";
+  btn.classList.toggle("toggled", on);
+  $("#toolbarHint").textContent = on
+    ? "Tryb edycji — pisz w tekście, zmiany zapisują się same."
+    : "Tryb występu — skróty klawiszowe są aktywne.";
+}
+
+/* ================= Zapis / odczyt tekstu ================= */
+let saveTimer = null;
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const clone = scriptEl.cloneNode(true);
+    clone.querySelectorAll(".cue.armed,.cue.playing").forEach(e => e.classList.remove("armed","playing"));
+    localStorage.setItem(LS.script, clone.innerHTML);
+  }, 500);
+}
+scriptEl.addEventListener("input", scheduleSave);
+
+function resetScript(){
+  if(!confirm("Przywrócić oryginalny tekst scenariusza? Twoje zmiany zostaną usunięte.")) return;
+  scriptEl.innerHTML = ORIGINAL_HTML;
+  localStorage.removeItem(LS.script);
+  hydrateCues();
+  updateArmed();
+}
+
+/* ================= Klik w chip scenariusza ================= */
+scriptEl.addEventListener("click", e => {
+  const cue = e.target.closest(".cue");
+  if(cue && cue.dataset.cue) trigger(cue.dataset.cue);
+});
+
+/* ================= Init ================= */
+function init(){
+  // odtworzenie zapisanych ustawień
+  const sv = parseFloat(localStorage.getItem(LS.vol));
+  if(!isNaN(sv)){ masterVol = sv; $("#vol").value = Math.round(sv*100); }
+
+  const savedHtml = localStorage.getItem(LS.script);
+  if(savedHtml){ scriptEl.innerHTML = savedHtml; }
+
+  buildAudio();
+  buildPads();
+  buildUnassigned();
+  hydrateCues();
+
+  const sa = parseInt(localStorage.getItem(LS.armed),10);
+  if(!isNaN(sa) && sa>=0 && sa<CUES.length) armed = sa;
+  updateArmed();
+
+  // kontrolki
+  $("#vol").addEventListener("input", e => {
+    masterVol = e.target.value/100;
+    Object.values(audio).forEach(a => a.volume = masterVol);
+    localStorage.setItem(LS.vol, String(masterVol));
+  });
+  $("#playNext").addEventListener("click", fireArmed);
+  $("#prevBtn").addEventListener("click", () => moveArmed(-1));
+  $("#nextBtn").addEventListener("click", () => moveArmed(1));
+  $("#rewindBtn").addEventListener("click", () => { armed=0; updateArmed(); });
+  $("#stopBtn").addEventListener("click", stopAll);
+  $("#editToggle").addEventListener("click", () => setEditMode(!editMode));
+  $("#resetBtn").addEventListener("click", resetScript);
+
+  setEditMode(false);
+}
+init();
+</script>
+</body>
+</html>
