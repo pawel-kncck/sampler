@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Konsola dźwięków — Szkoła oczami uczniów (4c)</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🎚️</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e1014'/><text x='50' y='70' text-anchor='middle' font-family='-apple-system,Segoe UI,sans-serif' font-size='62' font-weight='800' fill='%23f6a93b'>4C</text></svg>">
 <style>
   :root{
     --bg:#0e1014; --panel:#171a21; --panel2:#1f232c; --line:#2b313d;
@@ -276,6 +276,7 @@
       </div>
 
       <hr class="div">
+      <p class="cue-line"><span class="cue" data-cue="dzwonek_start" contenteditable="false"></span></p>
       <h2>Skecz 1 — powitanie</h2>
       <p class="line"><span class="who">Nauczyciel:</span> Dzień dobry, klaso!</p>
       <p class="stage">Uczniowie nie reagują, rozmawiają między sobą, ganiają się po klasie, rzucają się czymś – chaos!</p>
@@ -342,7 +343,6 @@
       <p class="line"><span class="who">Tosia <span class="paren">(Ula)</span>:</span> Proszę pana, czy mogę iść nalać wodę?</p>
       <p class="line"><span class="who">Nauczyciel:</span> A przerwa była za krótka?</p>
       <p class="line"><span class="who">Tosia <span class="paren">(Ula)</span>:</span> No ale przecież rozlało mi się, a wodę trzeba pić!</p>
-      <p class="cue-line"><span class="cue" data-cue="muzyczka" contenteditable="false"></span></p>
 
       <hr class="div">
       <h2>Skecz 5 — toaleta</h2>
@@ -445,7 +445,7 @@
       <div class="pads" id="pads"></div>
     </div>
 
-    <div>
+    <div id="unassignedWrap" hidden>
       <div class="section-title">DO ODTWORZENIA RĘCZNIE (brak gotowego pliku)</div>
       <div class="unassigned-list" id="unassigned"></div>
     </div>
@@ -454,7 +454,7 @@
       <b style="color:var(--text)">Skróty klawiszowe</b><br>
       <kbd>Spacja</kbd>/<kbd>Enter</kbd> — zagraj następny dźwięk z listy<br>
       <kbd>↑</kbd> <kbd>↓</kbd> — przesuń wskaźnik bez grania<br>
-      <kbd>1</kbd>…<kbd>9</kbd> <kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd> <kbd>Q</kbd> <kbd>W</kbd> — zagraj konkretny pad<br>
+      <kbd>1</kbd>…<kbd>9</kbd> <kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd> <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> — zagraj konkretny pad<br>
       <kbd>Esc</kbd> — natychmiast zatrzymaj wszystko
     </div>
   </aside>
@@ -465,21 +465,21 @@
 
 /* ---- Konfiguracja: wszystkie sygnały dźwiękowe w kolejności scenariusza ---- */
 const CUES = [
-  {id:"crickets",     pad:1,  key:"1", name:"Crickets (cisza)",      file:"samples/01_crickets.mp3"},
-  {id:"wah",          pad:2,  key:"2", name:"Wah Wah Wah",           file:"samples/02_wah-wah-wah.mp3"},
-  {id:"alert",        pad:3,  key:"3", name:"Alert",                 file:"samples/03_alert.mp3"},
-  {id:"ohno",         pad:4,  key:"4", name:"Oh No, No, No",         file:"samples/oh-no.mp3"},
-  {id:"vineboom",     pad:5,  key:"5", name:"Vine Boom",             file:"samples/04_vine-boom.mp3"},
-  {id:"badtothebone", pad:6,  key:"6", name:"Bad to the Bone",       file:"samples/05_bad-to-the-bone.mp3"},
-  {id:"sneaky",       pad:7,  key:"7", name:"Sneaky Snitch (~30 s)", file:"samples/sneaky-snitch.mp3"},
-  {id:"muzyczka",     pad:null,key:null,name:"Muzyczka",             file:null},
-  {id:"disgusting",   pad:8,  key:"8", name:"Spongebob Disgusting",  file:"samples/disgusting.mp3"},
-  {id:"badumtss",     pad:9,  key:"9", name:"Ba Dum Tss",            file:"samples/badumtss.mp3"},
-  {id:"wellwellwell", pad:10, key:"0", name:"Well, Well, Well",      file:"samples/well-well-well.mp3"},
-  {id:"fiveminutes",  pad:11, key:"-", name:"5 Minutes Later",       file:"samples/5-minutes-later.mp3"},
-  {id:"dzwonek",      pad:12, key:"=", name:"Dzwonek szkolny",       file:"samples/school-bell.mp3"},
-  {id:"yeahbaby",     pad:13, key:"q", name:"Woo Yeah Baby",         file:"samples/woo-yeah-baby.mp3"},
-  {id:"happy",        pad:14, key:"w", name:"Piosenka „Happy” — Pharrell Williams", file:"samples/happy.mp3"}
+  {id:"dzwonek_start",key:"e", name:"Dzwonek szkolny (start)",     file:"samples/[e]_school-bell.mp3"},
+  {id:"crickets",     key:"1", name:"Crickets (cisza)",            file:"samples/[1]_crickets.mp3"},
+  {id:"wah",          key:"2", name:"Wah Wah Wah",                 file:"samples/[2]_wah-wah-wah.mp3"},
+  {id:"alert",        key:"3", name:"Alert",                       file:"samples/[3]_alert.mp3"},
+  {id:"ohno",         key:"4", name:"Oh No, No, No",               file:"samples/[4]_oh-no.mp3", start:0.5},
+  {id:"vineboom",     key:"5", name:"Vine Boom",                   file:"samples/[5]_vine-boom.mp3"},
+  {id:"badtothebone", key:"6", name:"Bad to the Bone",             file:"samples/[6]_bad-to-the-bone.mp3"},
+  {id:"sneaky",       key:"7", name:"Sneaky Snitch (~30 s)",       file:"samples/[7]_sneaky-snitch.mp3"},
+  {id:"disgusting",   key:"8", name:"Spongebob Disgusting",        file:"samples/[8]_disgusting.mp3"},
+  {id:"badumtss",     key:"9", name:"Ba Dum Tss",                  file:"samples/[9]_badumtss.mp3"},
+  {id:"wellwellwell", key:"0", name:"Well, Well, Well",            file:"samples/[0]_well-well-well.mp3"},
+  {id:"fiveminutes",  key:"-", name:"5 Minutes Later",             file:"samples/[-]_5-minutes-later.mp3"},
+  {id:"dzwonek",      key:"=", name:"Dzwonek szkolny",             file:"samples/[=]_school-bell.mp3"},
+  {id:"yeahbaby",     key:"q", name:"Woo Yeah Baby",               file:"samples/[q]_woo-yeah-baby.mp3"},
+  {id:"happy",        key:"w", name:"Piosenka „Happy” — Pharrell Williams", file:"samples/[w]_happy.mp3"}
 ];
 const byId = Object.fromEntries(CUES.map(c => [c.id, c]));
 
@@ -489,7 +489,7 @@ let armed = 0;               // indeks w CUES
 let editMode = false;
 let masterVol = 0.9;
 let playingId = null;
-const LS = {script:"dd4c_script_v2", armed:"dd4c_armed", vol:"dd4c_vol"};
+const LS = {script:"dd4c_script_v3", armed:"dd4c_armed", vol:"dd4c_vol"};
 
 /* ---- Elementy ---- */
 const $ = s => document.querySelector(s);
@@ -520,7 +520,7 @@ function updateLoaded(r,t){
 }
 function markError(id){
   const c = byId[id];
-  if(c && c.pad){ const p = document.querySelector('.pad[data-id="'+id+'"]'); if(p) p.classList.add("error"); }
+  if(c && c.key){ const p = document.querySelector('.pad[data-id="'+id+'"]'); if(p) p.classList.add("error"); }
 }
 
 /* ================= Odtwarzanie ================= */
@@ -565,7 +565,7 @@ function trigger(id){
     return;
   }
 
-  a.currentTime = 0;
+  a.currentTime = c.start || 0;
   a.volume = masterVol;
   const pr = a.play();
   if(pr && pr.catch) pr.catch(() => { $("#npName").textContent = "⚠ Kliknij stronę, aby odblokować dźwięk"; });
@@ -605,12 +605,12 @@ function updateArmed(){
   const pad = document.querySelector('.pad[data-id="'+c.id+'"]'); if(pad) pad.classList.add("armed");
 
   const numEl = $("#armedNum");
-  numEl.textContent = c.pad ? c.pad : "♪";
-  numEl.classList.toggle("none", !c.pad);
+  numEl.textContent = c.key ? keyLabel(c.key).toUpperCase() : "♪";
+  numEl.classList.toggle("none", !c.key);
   $("#armedName").textContent = c.name;
 
   const next = CUES[armed+1];
-  let sub = c.pad ? ("klawisz "+keyLabel(c.key)) : "brak pliku — zagraj ręcznie";
+  let sub = c.key ? ("klawisz "+keyLabel(c.key).toUpperCase()) : (c.file ? "Spacja lub kliknij chip" : "brak pliku — zagraj ręcznie");
   if(next) sub += " &nbsp;·&nbsp; potem: <b>" + next.name + "</b>";
   $("#armedSub").innerHTML = sub;
 
@@ -621,12 +621,11 @@ function keyLabel(k){ return k==="-"?"−":k; }
 /* ================= Budowa padów ================= */
 function buildPads(){
   const wrap = $("#pads");
-  CUES.filter(c => c.pad).sort((a,b)=>a.pad-b.pad).forEach(c => {
+  CUES.filter(c => c.key).forEach(c => {
     const b = document.createElement("button");
     b.className = "pad"; b.dataset.id = c.id;
     b.innerHTML =
-      '<div class="pad-top"><span class="pad-key">'+keyLabel(c.key)+'</span>'+
-      '<span class="pad-no">pad '+c.pad+'</span></div>'+
+      '<div class="pad-top"><span class="pad-key">'+keyLabel(c.key).toUpperCase()+'</span></div>'+
       '<span class="pad-name">'+c.name+'</span>'+
       '<span class="pad-bar"><i></i></span>';
     b.addEventListener("click", () => { trigger(c.id); b.blur(); });
@@ -637,7 +636,9 @@ function buildPads(){
 /* ================= Sygnały bez pliku ================= */
 function buildUnassigned(){
   const wrap = $("#unassigned");
-  CUES.filter(c => !c.file).forEach(c => {
+  const unassigned = CUES.filter(c => !c.file);
+  $("#unassignedWrap").hidden = unassigned.length === 0;
+  unassigned.forEach(c => {
     const row = document.createElement("div");
     row.className = "ua-item"; row.dataset.id = c.id;
     row.innerHTML =
@@ -671,11 +672,11 @@ function hydrateCues(){
     el.classList.remove("armed","playing");
     const playable = !!audio[c.id];
     el.classList.toggle("unassigned", !playable);
-    if(c.pad){
-      el.innerHTML = '<span class="num">'+c.pad+'</span>♪ '+c.name+
-                     ' <span class="cue-key">'+keyLabel(c.key)+'</span>';
+    if(c.key){
+      el.innerHTML = '♪ '+c.name+
+                     ' <span class="cue-key">'+keyLabel(c.key).toUpperCase()+'</span>';
     } else {
-      el.innerHTML = '<span class="num">♪</span>'+c.name+
+      el.innerHTML = '♪ '+c.name+
                      ' <span class="cue-key">'+(playable?"wgrano":"ręcznie")+'</span>';
     }
   });
