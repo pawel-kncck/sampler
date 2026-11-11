@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Piano Hands</title>
+  <meta name="description" content="A pencil-sketch 3D pianist: anatomically modelled hands that compute their own fingering and play any MIDI piece." />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="view" aria-label="3D view of hands playing the piano"></canvas>
+  <div class="paper" aria-hidden="true"></div>
+
+  <header class="head">
+    <h1>Piano Hands</h1>
+    <div id="title" class="piece-title">—</div>
+    <div id="info" class="piece-info"></div>
+  </header>
+
+  <aside class="help" aria-label="Controls help">
+    <div><b>Drag</b> orbit · <b>Right-drag</b> pan · <b>Wheel</b> zoom</div>
+    <div><b>Space</b> play/pause · <b>← →</b> seek · <b>1–5</b> views · <b>N</b> finger numbers</div>
+    <div>Drop a <b>.mid</b> file anywhere to play it</div>
+  </aside>
+
+  <nav class="bar" aria-label="Playback controls">
+    <div class="row">
+      <button id="play" class="btn round" aria-label="Play" title="Play / pause (Space)">
+        <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+        <svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.6v14H7zM13.4 5H17v14h-3.6z"/></svg>
+      </button>
+      <button id="restart" class="btn" title="Back to start (Home)" aria-label="Back to start">
+        <svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM19 5.5v13L9.5 12z"/></svg>
+      </button>
+      <input id="seek" type="range" min="0" max="60" step="0.01" value="0" aria-label="Position" />
+      <span id="time" class="time">0:00 / 0:00</span>
+    </div>
+    <div class="row wrap">
+      <label class="field">
+        <span>Piece</span>
+        <select id="piece">
+          <optgroup label="Built in">
+            <option value="elise" selected>Für Elise — Beethoven</option>
+            <option value="study">Technical study — scales, arpeggios, chords</option>
+          </optgroup>
+          <optgroup label="Loaded"></optgroup>
+        </select>
+      </label>
+      <label class="btn file" title="Load a standard MIDI file">
+        <input id="file" type="file" accept=".mid,.midi,audio/midi,audio/x-midi" />
+        Load MIDI…
+      </label>
+      <label class="field">
+        <span>Tempo <em id="tempoVal">100%</em></span>
+        <input id="tempo" type="range" min="25" max="150" step="5" value="100" aria-label="Tempo" />
+      </label>
+      <label class="field">
+        <span>
+          <button id="mute" class="mini" title="Mute" aria-label="Mute">
+            <svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="wave" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          </button>
+          Volume
+        </span>
+        <input id="volume" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="Volume" />
+      </label>
+      <div class="views" role="group" aria-label="Camera">
+        <button class="chip active" data-view="front" title="1">Front</button>
+        <button class="chip" data-view="pianist" title="2">Pianist</button>
+        <button class="chip" data-view="above" title="3">Above</button>
+        <button class="chip" data-view="side" title="4">Side</button>
+        <button class="chip" data-view="close" title="5">Close</button>
+      </div>
+      <label class="check"><input id="follow" type="checkbox" checked /> Follow hands</label>
+      <label class="check"><input id="numbers" type="checkbox" checked /> Finger numbers</label>
+    </div>
+  </nav>
+
+  <div id="drop" class="drop"><div>Drop a MIDI file to play it</div></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

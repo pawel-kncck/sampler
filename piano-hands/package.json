@@ -1,0 +1,14 @@
+{
+  "name": "piano-hands",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pencil-sketch 3D hands that compute their own fingering and play any MIDI piece on the piano.",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "three": "0.170.0"
+  }
+}
