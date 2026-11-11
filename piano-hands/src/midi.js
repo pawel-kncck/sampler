@@ -90,7 +90,8 @@ export function parseMidi(buffer, name = 'MIDI file') {
   const shift = 1.0 - first;
   for (const n of playable) { n.start += shift; n.end += shift; }
   for (const q of pedal) { q.start += shift; q.end += shift; }
-  return { title: name.replace(/\.midi?$/i, ''), notes: playable, pedal, format };
+  // `offset` = seconds added to the file's own timeline (score time = file time + offset)
+  return { title: name.replace(/\.midi?$/i, ''), notes: playable, pedal, format, offset: shift };
 }
 
 function order(e) {

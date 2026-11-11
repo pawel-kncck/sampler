@@ -242,6 +242,13 @@ export class Performance {
     return out;
   }
 
+  /** Planned wrist pose of a hand ('L' or 'R') at score time t (metres / radians). */
+  wristAt(key, t) {
+    const h = this.hands.find((x) => x.key === key);
+    const w = this._sampleTrack(h, t, new Array(CH));
+    return { x: w[0], y: w[1], z: w[2], yaw: w[3], roll: w[4], pitch: w[5], spread: w[6] };
+  }
+
   // -------------------------------------------------------------- fingers
   _planFingers(h) {
     const nat = h.hand.natural;
