@@ -19,7 +19,7 @@ if (!input || !output) {
 const fps = Number(fpsArg) || 30;
 const buf = readFileSync(input);
 const score = parseMidi(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), basename(input));
-assignHands(score.notes);
+assignHands(score.notes, score.pedal);
 assignFingers(score.notes.filter((n) => n.hand === 'L'), -1);
 assignFingers(score.notes.filter((n) => n.hand === 'R'), 1);
 

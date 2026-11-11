@@ -213,64 +213,160 @@ export function assignFingers(notes, side) {
 }
 
 /**
- * Split notes between the hands when the source does not say which hand
- * plays what. Uses track information when there are two piano staves,
- * otherwise a greedy, reach-aware split that follows each hand's position.
+ * Decide which hand plays each note (when the source does not say), then
+ * work out when pedal-sustained keys are really released.
+ *
+ * Two piano staves (two tracks or channels) are taken as the two hands.
+ * Otherwise the notes are split by `splitByReach`.
  */
-export function assignHands(notes) {
-  if (notes.every((n) => n.hand === 'L' || n.hand === 'R')) return;
-
-  // two tracks/channels with notes → treat as two staves
-  const keyOf = (n) => `${n.track ?? 0}:${n.channel ?? 0}`;
-  const parts = new Map();
-  for (const n of notes) {
-    if (!parts.has(keyOf(n))) parts.set(keyOf(n), []);
-    parts.get(keyOf(n)).push(n);
-  }
-  if (parts.size === 2) {
-    const [a, b] = [...parts.values()];
-    const avg = (arr) => arr.reduce((s, n) => s + n.pitch, 0) / arr.length;
-    const [lo, hi] = avg(a) < avg(b) ? [a, b] : [b, a];
-    if (avg(hi) - avg(lo) > 5) {
-      lo.forEach((n) => { n.hand = 'L'; });
-      hi.forEach((n) => { n.hand = 'R'; });
-      fixReach(notes);
-      return;
+export function assignHands(notes, pedal = []) {
+  if (!notes.every((n) => n.hand === 'L' || n.hand === 'R')) {
+    // two tracks/channels with notes → treat as two staves
+    const keyOf = (n) => `${n.track ?? 0}:${n.channel ?? 0}`;
+    const parts = new Map();
+    for (const n of notes) {
+      if (!parts.has(keyOf(n))) parts.set(keyOf(n), []);
+      parts.get(keyOf(n)).push(n);
     }
-  }
-
-  const groups = groupByOnset(notes);
-  let cL = 48, cR = 72;
-  const held = { L: [], R: [] };
-  for (const g of groups) {
-    for (const h of ['L', 'R']) held[h] = held[h].filter((n) => n.end > g.t + 0.05);
-    const p = g.notes.map((n) => n.pitch);
-    let best = Infinity, bs = 0;
-    for (let s = 0; s <= p.length; s++) {
-      const left = p.slice(0, s).concat(held.L.map((n) => n.pitch));
-      const right = p.slice(s).concat(held.R.map((n) => n.pitch));
-      let c = 0;
-      for (const [part, center, h] of [[left, cL, 'L'], [right, cR, 'R']]) {
-        if (!part.length) continue;
-        const span = Math.max(...part) - Math.min(...part);
-        const mean = part.reduce((a, b) => a + b, 0) / part.length;
-        c += Math.max(0, span - 12) * 4 + Math.abs(mean - center) * 0.2;
-        if (part.length > 5) c += 100;
-        if (h === 'L' && mean > 66) c += (mean - 66) * 0.3;
-        if (h === 'R' && mean < 54) c += (54 - mean) * 0.3;
+    let staves = false;
+    if (parts.size === 2) {
+      const [a, b] = [...parts.values()];
+      const avg = (arr) => arr.reduce((s, n) => s + n.pitch, 0) / arr.length;
+      const [lo, hi] = avg(a) < avg(b) ? [a, b] : [b, a];
+      if (avg(hi) - avg(lo) > 5) {
+        lo.forEach((n) => { n.hand = 'L'; });
+        hi.forEach((n) => { n.hand = 'R'; });
+        fixReach(notes);
+        staves = true;
       }
-      if (left.length && right.length && Math.max(...left) >= Math.min(...right)) c += 30;
-      if (c < best) { best = c; bs = s; }
     }
-    g.notes.forEach((n, i) => { n.hand = i < bs ? 'L' : 'R'; held[n.hand].push(n); });
-    const lp = g.notes.filter((n) => n.hand === 'L').map((n) => n.pitch);
-    const rp = g.notes.filter((n) => n.hand === 'R').map((n) => n.pitch);
-    if (lp.length) cL = cL * 0.5 + (lp.reduce((a, b) => a + b, 0) / lp.length) * 0.5;
-    if (rp.length) cR = cR * 0.5 + (rp.reduce((a, b) => a + b, 0) / rp.length) * 0.5;
-    if (cR - cL < 7) { const m = (cL + cR) / 2; cL = m - 3.5; cR = m + 3.5; }
+    if (!staves) splitByReach(notes, pedal);
   }
-  fixReach(notes);
+  releaseSustained(notes, pedal);
 }
+
+/** Notes whose written end coincides with a pedal release: sustained by the pedal, not the finger. */
+function pedalSustained(notes, pedal) {
+  const out = new Map();
+  if (!pedal.length) return out;
+  const ends = pedal.map((p) => p.end).sort((a, b) => a - b);
+  const byEnd = pedal.slice().sort((a, b) => a.end - b.end);
+  for (const n of notes) {
+    let lo = 0, hi = ends.length - 1;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (ends[m] < n.end - 0.08) lo = m + 1; else hi = m; }
+    for (let i = lo; i < ends.length && ends[i] <= n.end + 0.08; i++) {
+      if (byEnd[i].start < n.end) { out.set(n, byEnd[i]); break; }
+    }
+  }
+  return out;
+}
+
+/**
+ * MIDI made by transcribing audio (and some sequenced files) writes how long
+ * a note sounds, so a pedalled note "lasts" until the pedal lifts. A finger
+ * does not stay on such a key for seconds: it holds until the pedal has
+ * caught the note and the hand plays again. Shortens `note.end` to that key
+ * release and keeps the written end in `note.sounding`.
+ */
+function releaseSustained(notes, pedal) {
+  const sustained = pedalSustained(notes, pedal);
+  if (!sustained.size) return;
+  for (const hand of ['L', 'R']) {
+    const groups = groupByOnset(notes.filter((n) => n.hand === hand));
+    groups.forEach((g, gi) => {
+      const next = gi + 1 < groups.length ? groups[gi + 1].t : Infinity;
+      for (const n of g.notes) {
+        const p = sustained.get(n);
+        if (!p) continue;
+        const caught = Math.max(n.start + 0.1, p.start + 0.04); // hold at least until the pedal is down
+        const release = Math.min(n.end, Math.max(next + 0.02, caught));
+        if (release < n.end) { n.sounding = n.end; n.end = release; }
+      }
+    });
+  }
+}
+
+/**
+ * Split a single stream of notes between the hands.
+ *
+ * Dynamic programming over chord groups: every group can be cut at any point
+ * of its pitch order (lower notes left, higher notes right). A cut costs
+ * what it asks of each hand: stretching beyond an octave, travelling (the
+ * further and the faster, the worse), crossing the other hand, or playing far
+ * outside its usual register. Because whole paths are compared, a hand is
+ * not sent somewhere it cannot get back from in time.
+ */
+function splitByReach(notes, pedal) {
+  const groups = groupByOnset(notes);
+  const sustained = pedalSustained(notes, pedal);
+  // how long a key is assumed held, as far as the split is concerned
+  const holdEnd = (n) => Math.min(n.end, n.start + (sustained.has(n) ? 0.3 : 1.5));
+  const centreOf = (p) => (p[0] + p[p.length - 1]) / 2;
+
+  const handCost = (hs, p, t, side) => {
+    if (!p.length) return 0;
+    let c = p.length > 5 ? 100 : 0;
+    let lo = p[0], hi = p[p.length - 1];
+    for (const h of hs.held) if (h.end > t + 0.03) { if (h.pitch < lo) lo = h.pitch; if (h.pitch > hi) hi = h.pitch; }
+    const span = hi - lo;
+    c += SPLIT.overSpan * Math.max(0, span - 12) + SPLIT.impossible * Math.max(0, span - 16) + SPLIT.wide * Math.max(0, span - 9);
+    const centre = centreOf(p);
+    if (hs.pos != null) {
+      const d = Math.max(0, Math.abs(centre - hs.pos) - SPLIT.free);
+      c += SPLIT.distance * d + (SPLIT.speed * d) / Math.max(t - hs.t, 0.06);
+    }
+    c += SPLIT.register * (side < 0 ? Math.max(0, centre - 60) : Math.max(0, 60 - centre));
+    return c;
+  };
+  const advance = (hs, groupNotes, p, t) => {
+    if (!p.length) return hs;
+    const held = hs.held.filter((h) => h.end > t + 0.03);
+    for (const n of groupNotes) held.push({ pitch: n.pitch, end: holdEnd(n) });
+    return { pos: centreOf(p), t, held };
+  };
+
+  const idle = { pos: null, t: -Infinity, held: [] };
+  let prev = [{ cost: 0, back: -1, L: idle, R: idle }];
+  const layers = [];
+  for (const g of groups) {
+    const p = g.notes.map((n) => n.pitch);
+    const cur = [];
+    for (let s = 0; s <= p.length; s++) {
+      const lp = p.slice(0, s), rp = p.slice(s);
+      let best = Infinity, bi = -1;
+      for (let pi = 0; pi < prev.length; pi++) {
+        const ps = prev[pi];
+        let c = ps.cost + handCost(ps.L, lp, g.t, -1) + handCost(ps.R, rp, g.t, 1);
+        const cl = lp.length ? centreOf(lp) : ps.L.pos, cr = rp.length ? centreOf(rp) : ps.R.pos;
+        if (cl != null && cr != null && cl > cr) c += SPLIT.crossing + 0.5 * (cl - cr);
+        if (c < best) { best = c; bi = pi; }
+      }
+      const from = prev[bi];
+      cur.push({ cost: best, back: bi, s, L: advance(from.L, g.notes.slice(0, s), lp, g.t), R: advance(from.R, g.notes.slice(s), rp, g.t) });
+    }
+    layers.push(cur);
+    prev = cur;
+  }
+  let si = 0;
+  for (let i = 1; i < prev.length; i++) if (prev[i].cost < prev[si].cost) si = i;
+  for (let gi = groups.length - 1; gi >= 0; gi--) {
+    const st = layers[gi][si];
+    groups[gi].notes.forEach((n, i) => { n.hand = i < st.s ? 'L' : 'R'; });
+    si = st.back;
+  }
+}
+
+// Weights of the hand-split costs (units: semitones, seconds).
+const SPLIT = {
+  overSpan: 2.5,  // per semitone a hand must span beyond an octave (with the keys it still holds)
+  impossible: 8,  // ... and beyond a tenth
+  wide: 0.15,     // per semitone beyond a comfortable 6th/7th
+  free: 2.5,      // how far the hand's centre may shift for free
+  distance: 0.12, // per semitone of travel
+  speed: 0.06,    // per semitone/second of travel
+  crossing: 3,    // hands crossed
+  register: 0.05, // per semitone the left hand is above / the right hand below middle C
+};
 
 // If a staff-based split gives one hand a chord it cannot span, hand the
 // outlying note to the other hand when that hand is free.

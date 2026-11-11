@@ -9,44 +9,67 @@ import * as THREE from 'three';
 // Bone lengths in metres for an average adult hand (hand length ≈ 19 cm,
 // breadth ≈ 8.5 cm, span thumb–little finger ≈ 21 cm). Values follow
 // published phalanx/metacarpal measurements.
+//
+// `home` is where each fingertip rests, in hand-local coordinates: a relaxed,
+// gently arched hand with the five tips over five neighbouring white keys
+// (23.5 mm apart) and the thumb, being shorter, nearer the front of the keys. The resting
+// joint angles are solved from it. `coupling` is DIP flexion as a fraction of
+// PIP flexion; it is lower than in free-air curling because the pad rests on
+// a key.
+export const KEY_PITCH = 0.0235;
 export const FINGERS = [
   { // thumb – the "metacarpal" segment pivots at the CMC (saddle) joint and
     // runs along the radial edge of the palm; flexion curls the tip down and
     // in towards the palm (the frame is rolled accordingly)
     name: 'thumb',
-    base: [-0.02, -0.014, -0.022],
+    base: [-0.03, -0.012, -0.03],
     yaw: 0.45, pitch: -0.16, roll: 0.6,
     len: [0.046, 0.032, 0.025],
     rad: [0.0128, 0.0102, 0.0094],
-    coupling: 0.75,
-    abd: [-0.6, 0.6], flex1: [-0.5, 1.0], flex2: 1.2,
-    rest: [0, 0.1, 0.5],
+    coupling: 0.6,
+    abd: [-0.6, 0.6], flex1: [-0.8, 1.0], flex2: 1.2,
+    home: [-0.0085 - 2 * KEY_PITCH, -0.046, -0.108],
   },
   {
-    name: 'index', base: [-0.027, 0.004, -0.088], yaw: -0.06, pitch: 0, roll: 0,
+    name: 'index', base: [-0.027, 0.004, -0.088], yaw: 0.10, pitch: 0, roll: 0,
     len: [0.040, 0.0235, 0.0195], rad: [0.0094, 0.0084, 0.0077],
-    coupling: 0.7, abd: [-0.45, 0.45], flex1: [-0.35, 1.55], flex2: 1.85,
-    rest: [0, 0.52, 1.0],
+    coupling: 0.5, abd: [-0.4, 0.4], flex1: [-0.35, 1.55], flex2: 1.85,
+    home: [-0.0085 - KEY_PITCH, -0.0455, -0.129],
   },
   {
     name: 'middle', base: [-0.0085, 0.0065, -0.091], yaw: 0, pitch: 0, roll: 0,
     len: [0.0445, 0.0275, 0.0205], rad: [0.0097, 0.0087, 0.0079],
-    coupling: 0.7, abd: [-0.35, 0.35], flex1: [-0.35, 1.55], flex2: 1.85,
-    rest: [0, 0.52, 1.05],
+    coupling: 0.5, abd: [-0.35, 0.35], flex1: [-0.35, 1.55], flex2: 1.85,
+    home: [-0.0085, -0.0455, -0.135],
   },
   {
-    name: 'ring', base: [0.0095, 0.0045, -0.0855], yaw: 0.045, pitch: 0, roll: 0,
+    name: 'ring', base: [0.0095, 0.0045, -0.0855], yaw: -0.105, pitch: 0, roll: 0,
     len: [0.0415, 0.026, 0.020], rad: [0.0091, 0.0082, 0.0075],
-    coupling: 0.7, abd: [-0.35, 0.35], flex1: [-0.35, 1.55], flex2: 1.85,
-    rest: [0, 0.52, 1.02],
+    coupling: 0.5, abd: [-0.33, 0.33], flex1: [-0.35, 1.55], flex2: 1.85,
+    home: [-0.0085 + KEY_PITCH, -0.0455, -0.127],
   },
   {
-    name: 'little', base: [0.0265, -0.001, -0.0755], yaw: 0.11, pitch: 0, roll: 0.06,
+    name: 'little', base: [0.0265, -0.001, -0.0755], yaw: -0.25, pitch: 0, roll: 0.06,
     len: [0.0335, 0.0195, 0.018], rad: [0.0082, 0.0074, 0.0069],
-    coupling: 0.7, abd: [-0.8, 0.35], flex1: [-0.35, 1.55], flex2: 1.85,
-    rest: [0, 0.50, 0.92],
+    coupling: 0.5, abd: [-0.5, 0.35], flex1: [-0.35, 1.55], flex2: 1.85,
+    home: [-0.0085 + 2 * KEY_PITCH, -0.041, -0.1135],
   },
 ];
+
+// Forearm model: the elbow sits beside the body and follows part of the
+// wrist's sideways travel. The hand takes up most of the forearm's turn, and
+// points straight along the keys a little inside the elbow's rest position
+// (pianists' wrists are slightly bent outwards when playing in front of the
+// body). The last two values are fitted to real pianists' hand directions.
+export const ARM = {
+  shoulderX: 0.21,   // elbow rest position, metres from the keyboard middle
+  elbowFollow: 0.45, // fraction of the wrist's sideways travel the elbow follows
+  length: 0.29,      // wrist to elbow, along the keys' depth
+  handFollow: 0.75,  // fraction of the forearm's turn that the hand takes up
+  straightX: 0.12,   // wrist position (metres from the middle) where the hand points straight ahead
+};
+/** How much the hand turns (radians) per metre the wrist moves sideways. */
+export const YAW_PER_METRE = (ARM.handFollow * (1 - ARM.elbowFollow)) / ARM.length;
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
@@ -256,8 +279,14 @@ export class Hand {
     this.object = new THREE.Group();
     this.object.add(this.root, this.arm);
 
-    // Natural (relaxed) fingertip positions in hand-local coordinates.
-    for (const f of this.fingers) f.setAngles(...f.def.rest);
+    // Natural (relaxed) pose: solve each finger for its home position, then
+    // record where the tips actually are, in hand-local coordinates.
+    this.root.updateMatrixWorld(true);
+    for (const f of this.fingers) {
+      const t = this.hand.localToWorld(new THREE.Vector3(...f.def.home));
+      f.solveLocal(f.base.worldToLocal(t));
+      f.restAngles = { ...f.angles };
+    }
     this.root.updateMatrixWorld(true);
     const inv = new THREE.Matrix4().copy(this.hand.matrixWorld).invert();
     this.natural = this.fingers.map((f) => f.tipWorld(new THREE.Vector3()).applyMatrix4(inv));
@@ -271,7 +300,8 @@ export class Hand {
     this.root.updateMatrixWorld(true);
 
     // forearm: from the wrist back towards an elbow beside the body
-    const elbow = _w.set(this.side * 0.21 + (x - this.side * 0.21) * 0.45, y + 0.02, z + 0.29);
+    const sx = this.side * ARM.shoulderX;
+    const elbow = _w.set(sx + (x - sx) * ARM.elbowFollow, y + 0.02, z + ARM.length);
     _v.set(0, 0, 0.004);
     this.root.localToWorld(_v);
     this.arm.position.copy(_v);

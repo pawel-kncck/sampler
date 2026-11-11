@@ -3,11 +3,15 @@
 // Everything here is a deterministic function of score time, so playback can
 // be paused, scrubbed or slowed down freely.
 //
-//  * Wrist: one key-frame per chord/note onset (least-squares fit of the
-//    hand position to the fingers that are about to play or are holding
-//    keys), joined with minimum-jerk moves that arrive just before the
-//    onset, then low-pass filtered. Roll (pronation/supination) and yaw
-//    follow which fingers are active and thumb crossings.
+//  * Wrist: one key-frame per chord/note onset. Each onset allows a range of
+//    wrist positions (those from which its notes and the keys still held
+//    are within the fingers' sideways reach); the wrist takes the calmest
+//    path through those ranges. Key-frames are joined with unhurried
+//    minimum-jerk moves that arrive just before the onset, then low-pass
+//    filtered. The hand turns with the forearm and for thumb crossings, and
+//    rolls towards the active fingers. Reach limits, the hand's turn and
+//    the resulting wrist travel are calibrated against real pianists (see
+//    tools/pianomotion).
 //  * Fingers: each finger is either pressing a key (tip locked to the moving
 //    key surface), approaching the next key (lift–strike arc that hits the
 //    key with velocity), releasing (rides the key up, relaxes), or resting
@@ -16,6 +20,7 @@
 import * as THREE from 'three';
 import { keyInfo, keySurfaceY, restSurfaceAt, BLACK_FRONT } from './piano.js';
 import { groupByOnset } from './fingering.js';
+import { ARM, YAW_PER_METRE } from './hand.js';
 
 const DT = 1 / 120;
 const PAD = 0.0068; // fingertip pad: bone end sits this far above the contact point
@@ -46,12 +51,15 @@ function keyDepth(n, t) {
 
 const CH = 7; // x, y, z, yaw, roll, pitch, spread
 
-// How far each fingertip can comfortably deviate sideways from its relaxed
-// position, as [towards thumb side, towards little-finger side] in metres
-// (hand coordinates). The thumb can pass under the hand and fingers can
-// cross over the thumb (helped by wrist yaw); otherwise curled fingers only
-// get ~1 cm from MCP abduction.
-const HAND_REACH = [[-0.02, 0.036], [-0.014, 0.010], [-0.012, 0.010], [-0.010, 0.010], [-0.008, 0.013]];
+// How far each fingertip can comfortably deviate sideways from its resting
+// place over "its" key, as [towards thumb side, towards little-finger side] in
+// metres (hand coordinates). The thumb can pass under the hand; the outer
+// fingers have more room to spread outwards than inwards.
+const HAND_REACH = [[-0.015, 0.045], [-0.016, 0.015], [-0.015, 0.015], [-0.013, 0.014], [-0.010, 0.015]];
+// Pull of the wrist towards the comfortable centre of its reachable range,
+// relative to the cost of moving (see _buildTrack). It only matters where the
+// reach limits leave the wrist free; the limits themselves shape the path.
+const CENTRE_PULL = 0.03;
 
 export class Performance {
   constructor(score, hands) {
@@ -94,62 +102,122 @@ export class Performance {
   _buildTrack(h) {
     const { side, hand, notes } = h;
     const nat = hand.natural;
-    const baseZ = -0.040 - nat[2].z;
+    const baseZ = -0.02 - nat[0].z; // the thumb, the shortest reach, rests 2 cm inside the key fronts
     const baseY = 0.004 + PAD - nat[4].y;
     const pitch = -0.035;
+    // The hand stays partly in line with the forearm, so it turns as the
+    // wrist travels sideways: theta = K * (x - x0), positive = fingers point
+    // towards the high notes. A turn moves each fingertip sideways by its
+    // lever (distance ahead of the wrist) times the angle.
+    const x0 = side * ARM.straightX;
+    const K = YAW_PER_METRE;
+    const lever = nat.map((v) => -v.z);
+    h.lever = lever;
 
     const groups = groupByOnset(notes);
-    const frames = [];
-    // wrist positions that keep a note's finger within comfortable reach
-    const range = (n) => {
-      const nx = nat[n.finger].x;
-      const [a, b] = HAND_REACH[n.finger];
-      return side > 0 ? [n.info.x - nx - b, n.info.x - nx - a] : [n.info.x + nx + a, n.info.x + nx + b];
-    };
-    let prevX = null;
-    for (let gi = 0; gi < groups.length; gi++) {
+    const G = groups.length;
+
+    // Extra turn for genuine thumb crossings (thumb passing under a finger,
+    // or a finger crossing over the thumb) close to each onset. Track units:
+    // positive = towards the thumb side.
+    const cross = new Float64Array(G);
+    for (let gi = 0; gi < G; gi++) {
       const g = groups[gi];
-      // least-squares position for this onset (used when constraints conflict),
-      // weighted so each finger stretches in proportion to its capacity
-      let ls = 0;
-      for (let it = 0; it < 3; it++) {
-        let sw = 0, sx = 0;
-        for (const n of g.notes) {
-          const want = n.info.x - side * nat[n.finger].x;
-          let w = 1;
-          if (it > 0) {
-            const dev = side * (n.info.x - ls) - nat[n.finger].x;
-            const cap = dev < 0 ? -HAND_REACH[n.finger][0] : HAND_REACH[n.finger][1];
-            w = 1 / (cap * cap);
-          }
-          sw += w; sx += w * want;
+      const win = [];
+      for (let k = Math.max(0, gi - 3); k < Math.min(G, gi + 4); k++) {
+        if (Math.abs(groups[k].t - g.t) < 0.45) win.push(...groups[k].notes);
+      }
+      let c = 0;
+      for (const a of win) {
+        if (a.finger !== 0) continue;
+        for (const b of win) {
+          if (b.finger === 0 || b.finger === 4 || Math.abs(a.start - b.start) > 0.35) continue;
+          const over = side * (a.info.x - b.info.x); // > 0: thumb is on the little-finger side
+          if (over <= 0) continue;
+          const wt = Math.exp(-Math.abs((a.start + b.start) / 2 - g.t) / 0.2);
+          const amt = Math.min(0.12, 1.5 * (over + 0.01)) * wt;
+          c += a.start > b.start ? -amt : amt; // thumb under vs finger over
         }
-        ls = sx / sw;
       }
-      // feasible wrist interval: this chord, then held notes, then upcoming notes
-      let lo = -Infinity, hi = Infinity;
-      const take = (n) => {
-        const [a, b] = range(n);
-        const nlo = Math.max(lo, a), nhi = Math.min(hi, b);
-        if (nlo > nhi) return false;
-        lo = nlo; hi = nhi; return true;
-      };
-      let ok = true;
-      for (const n of g.notes) if (!take(n)) { ok = false; break; }
-      let x;
-      if (!ok) x = ls;
-      else {
-        // keys still held (or only just released, so the hand does not
-        // leave them before they come up)
-        for (let k = gi - 1; k >= 0 && g.t - groups[k].t < 6; k--)
-          for (const n of groups[k].notes) if (n.end > g.t - 0.06) take(n);
-        outer: for (let k = gi + 1; k < groups.length && groups[k].t - g.t < 0.45; k++)
-          for (const n of groups[k].notes) if (!take(n)) break outer;
-        const center = (lo + hi) / 2;
-        const from = prevX ?? ls;
-        x = Math.min(hi, Math.max(lo, from + (center - from) * 0.35));
+      cross[gi] = clamp(c, -0.12, 0.12);
+    }
+
+    // Wrist positions for a note at onset gi: `zero` puts the finger exactly
+    // over the key; [lo, hi] keeps it within comfortable sideways reach.
+    const range = (n, gi) => {
+      const f = n.finger;
+      const Gf = 1 + lever[f] * K;
+      const C = n.info.x - side * nat[f].x + lever[f] * (K * x0 + side * cross[gi]);
+      const [a, b] = HAND_REACH[f];
+      return side > 0 ? { zero: C / Gf, lo: (C - b) / Gf, hi: (C - a) / Gf } : { zero: C / Gf, lo: (C + a) / Gf, hi: (C + b) / Gf };
+    };
+
+    // 1. corridor: for every onset, the wrist positions from which all of its
+    //    notes (and the keys still held) can be reached
+    const lo = new Float64Array(G), hi = new Float64Array(G), mid = new Float64Array(G);
+    for (let gi = 0; gi < G; gi++) {
+      const g = groups[gi];
+      const rs = g.notes.map((n) => range(n, gi));
+      let a = Math.max(...rs.map((r) => r.lo)), b = Math.min(...rs.map((r) => r.hi));
+      // comfortable centre: fingers stretch in proportion to their capacity
+      let c = rs.reduce((s, r) => s + r.zero, 0) / rs.length;
+      if (a > b) {
+        // wider than a comfortable hand: share the stretch between the outer fingers
+        for (let it = 0; it < 3; it++) {
+          let sw = 0, sx = 0;
+          g.notes.forEach((n, i) => {
+            const dev = side * (rs[i].zero - c);
+            const cap = dev < 0 ? -HAND_REACH[n.finger][0] : HAND_REACH[n.finger][1];
+            const w = 1 / (cap * cap);
+            sw += w; sx += w * rs[i].zero;
+          });
+          c = sx / sw;
+        }
+        a = b = c;
+      } else {
+        c = clamp(c, a, b);
+        // keys still held, or only just released (the hand should not leave before they come up)
+        for (let k = gi - 1; k >= 0 && g.t - groups[k].t < 6; k--) {
+          for (const n of groups[k].notes) {
+            if (n.end <= g.t - 0.06) continue;
+            const r = range(n, gi);
+            const na = Math.max(a, r.lo), nb = Math.min(b, r.hi);
+            if (na <= nb) { a = na; b = nb; }
+            // just out of reach: stay as close as possible. Further than
+            // that, the finger simply lets go of the key (see _planFingers).
+            else if (r.hi < a && a - r.hi < 0.005) b = a;
+            else if (r.lo > b && r.lo - b < 0.005) a = b;
+          }
+        }
       }
-      prevX = x;
+      lo[gi] = a; hi[gi] = b; mid[gi] = clamp(c, a, b);
+    }
+    // 2. economy of motion: the calmest path through the corridor. It
+    //    minimises wrist speed while being pulled gently towards the
+    //    comfortable centre, so the wrist follows slow changes of register
+    //    and lets the fingers take care of quick ones.
+    const x = Float64Array.from(mid);
+    const w = new Float64Array(Math.max(0, G - 1));
+    for (let gi = 0; gi < G - 1; gi++) w[gi] = 1 / (groups[gi + 1].t - groups[gi].t + 0.08);
+    for (let it = 0; it < 80; it++) {
+      let change = 0;
+      for (let pass = 0; pass < 2; pass++) {
+        for (let q = 0; q < G; q++) {
+          const gi = pass ? G - 1 - q : q;
+          let sw = CENTRE_PULL, sx = CENTRE_PULL * mid[gi];
+          if (gi > 0) { sw += w[gi - 1]; sx += w[gi - 1] * x[gi - 1]; }
+          if (gi < G - 1) { sw += w[gi]; sx += w[gi] * x[gi + 1]; }
+          const v = clamp(sx / sw, lo[gi], hi[gi]);
+          change = Math.max(change, Math.abs(v - x[gi]));
+          x[gi] = v;
+        }
+      }
+      if (change < 2e-5) break;
+    }
+
+    const frames = [];
+    for (let gi = 0; gi < G; gi++) {
+      const g = groups[gi];
       const blacks = g.notes.filter((n) => n.info.black).length / g.notes.length;
       const thumbBlack = g.notes.some((n) => n.finger === 0 && n.info.black);
       // wide chords / stretches: the hand lowers and moves in so the fingers
@@ -163,47 +231,34 @@ export class Performance {
       // roll towards the active side of the hand
       const fc = g.notes.reduce((s, n) => s + n.finger, 0) / g.notes.length;
       const roll = (fc - 2) * 0.04;
-      // yaw from genuine thumb crossings (thumb passing under a finger, or a
-      // finger crossing over the thumb) close to this onset
-      let yaw = 0;
-      const win = [];
-      for (let k = Math.max(0, gi - 3); k < Math.min(groups.length, gi + 4); k++) {
-        if (Math.abs(groups[k].t - g.t) < 0.45) win.push(...groups[k].notes);
-      }
-      for (const a of win) {
-        if (a.finger !== 0) continue;
-        for (const b of win) {
-          if (b.finger === 0 || b.finger === 4 || Math.abs(a.start - b.start) > 0.35) continue;
-          const cross = side * (a.info.x - b.info.x); // > 0: thumb is on the little-finger side
-          if (cross <= 0) continue;
-          const w = Math.exp(-Math.abs((a.start + b.start) / 2 - g.t) / 0.2);
-          const amt = Math.min(0.2, 2.2 * (cross + 0.01)) * w;
-          yaw += a.start > b.start ? -amt : amt; // thumb under vs finger over
-        }
-      }
-      yaw = clamp(yaw, -0.24, 0.24);
-      frames.push({ t: g.t, v: [x, y, z, yaw, roll, pitch, spread] });
+      // turn with the forearm (track units: positive = towards the thumb
+      // side), plus the extra for thumb crossings
+      const yaw = -side * K * (x[gi] - x0) + cross[gi];
+      frames.push({ t: g.t, v: [x[gi], y, z, yaw, roll, pitch, spread], rel: Math.max(...g.notes.map((n) => n.end)) });
     }
     if (!frames.length) {
-      frames.push({ t: 0, v: [side * 0.24, baseY + 0.01, baseZ + 0.02, 0, 0, pitch, 0] });
+      frames.push({ t: 0, v: [side * 0.24, baseY + 0.01, baseZ + 0.02, -side * K * (side * 0.24 - x0), 0, pitch, 0], rel: 0 });
     }
 
     const n = Math.ceil(this.duration / DT) + 2;
     const data = new Float32Array(n * CH);
-    // transitions
+    // 3. moves between key-frames: unhurried, starting when the previous keys
+    //    are released (so the hand arrives early and waits when there is
+    //    time) and always arriving just before the next onset
     const moves = [];
     let prevEnd = -Infinity;
     for (let j = 0; j < frames.length - 1; j++) {
       const a = frames[j], b = frames[j + 1];
-      let me = b.t - 0.03;
+      const me = b.t - 0.03;
       const dist = Math.abs(b.v[0] - a.v[0]) + Math.abs(b.v[2] - a.v[2]);
-      const T = clamp(0.13 + 1.4 * dist, 0.13, 0.5);
-      let ms = Math.max(me - T, a.t + 0.05);
+      const T = clamp(0.3 + 2.2 * dist, 0.3, 1.0);
+      let ms = Math.max(a.t + 0.06, Math.min(a.rel - 0.05, me - T));
       ms = Math.min(ms, me - 0.02);
       if (ms < prevEnd) ms = prevEnd;
-      if (me < ms + 0.01) me = ms + 0.01;
-      moves.push([ms, me]);
-      prevEnd = me;
+      let end = Math.min(me, ms + T);
+      if (end < ms + 0.01) end = ms + 0.01;
+      moves.push([ms, end]);
+      prevEnd = end;
     }
     let j = 0;
     for (let i = 0; i < n; i++) {
@@ -218,7 +273,7 @@ export class Performance {
       }
     }
     // zero-phase Gaussian low-pass (muscle/limb inertia)
-    const sm = gaussianSmooth(data, n, CH, 0.022 / DT);
+    const sm = gaussianSmooth(data, n, CH, 0.03 / DT);
     // arm-weight dip into accented notes
     for (const nt of notes) {
       const v = nt.velocity ?? 0.6;
@@ -253,29 +308,41 @@ export class Performance {
   _planFingers(h) {
     const nat = h.hand.natural;
     const tmp = new Array(CH);
+    const target = new THREE.Vector3(), tip = new THREE.Vector3();
+    const place = (n, f) => {
+      // Where along the key does this finger land? Start from where the
+      // relaxed fingertip is for the wrist pose at the onset (including the
+      // hand's turn).
+      this._sampleTrack(h, n.start, tmp);
+      const psi = h.side * tmp[3]; // world rotation about the vertical axis
+      const lx = h.side * nat[f].x, lz = nat[f].z;
+      const natX = tmp[0] + lx * Math.cos(psi) + lz * Math.sin(psi);
+      // extended fingers reach further in; the thumb comes forward to the key front
+      const natZ = tmp[2] - lx * Math.sin(psi) + lz * Math.cos(psi) + (f ? -0.012 : 0.03) * tmp[6];
+      n.cz = n.info.black ? clamp(natZ, -0.14, BLACK_FRONT - 0.008) : clamp(natZ, -0.13, -0.012);
+      // strike the part of the key closest to where the finger naturally is
+      const play = n.info.black || n.cz < BLACK_FRONT ? (n.info.black ? 0.003 : 0.002) : 0.0075;
+      n.cx = clamp(natX, n.info.x - play, n.info.x + play);
+      // can the finger get there at all? (a chord wider than the hand cannot be played as written)
+      h.hand.setWrist(tmp[0], tmp[1], tmp[2], tmp[3], tmp[4], tmp[5]);
+      h.hand.reach(f, this._contact(n, n.start, target));
+      n.unreachable = h.hand.fingers[f].tipWorld(tip).distanceTo(target) > 0.008;
+    };
     for (let f = 0; f < 5; f++) {
-      const list = h.fingers[f];
-      list.sort((a, b) => a.start - b.start);
+      h.fingers[f].sort((a, b) => a.start - b.start);
+      for (const n of h.fingers[f]) place(n, f);
+      // keys out of reach still go down and sound, but no finger is sent to them
+      const list = h.fingers[f] = h.fingers[f].filter((n) => !n.unreachable);
       for (let k = 0; k < list.length; k++) {
         const n = list[k];
-        // where along the key does this finger land?
-        this._sampleTrack(h, n.start, tmp);
-        // extended fingers reach further in; the thumb comes forward to the key front
-        const natZ = tmp[2] + nat[f].z + (f ? -0.012 : 0.03) * tmp[6];
-        n.cz = n.info.black ? clamp(natZ, -0.14, BLACK_FRONT - 0.008) : clamp(natZ, -0.13, -0.012);
-        // strike the part of the key closest to where the finger naturally is
-        const natX = tmp[0] + h.side * nat[f].x;
-        const play = n.info.black || n.cz < BLACK_FRONT ? (n.info.black ? 0.003 : 0.002) : 0.0075;
-        n.cx = clamp(natX, n.info.x - play, n.info.x + play);
         // If the hand has to move on while the key is still held (e.g. a
-        // leap under pedal), the finger lets go as soon as it is out of reach.
-        const dev0 = h.side * (n.cx - tmp[0]) - nat[f].x;
-        const [ra, rb] = HAND_REACH[f];
-        const lo = Math.min(ra, dev0) - 0.008, hi = Math.max(rb, dev0) + 0.008;
-        for (let tt = n.start + 0.05; tt < n.vEnd; tt += 0.01) {
+        // leap under pedal), the finger lets go as soon as the key is out of
+        // its reach.
+        for (let tt = n.start + 0.04; tt < n.vEnd; tt += 0.02) {
           this._sampleTrack(h, tt, tmp);
-          const dev = h.side * (n.cx - tmp[0]) - nat[f].x;
-          if (dev < lo || dev > hi) { n.vEnd = tt; break; }
+          h.hand.setWrist(tmp[0], tmp[1], tmp[2], tmp[3], tmp[4], tmp[5]);
+          h.hand.reach(f, this._contact(n, tt, target));
+          if (h.hand.fingers[f].tipWorld(tip).distanceTo(target) > 0.003) { n.vEnd = Math.max(n.start + 0.02, tt - 0.02); break; }
         }
         // a finger cannot hold a key while it plays another one
         const next = list[k + 1];

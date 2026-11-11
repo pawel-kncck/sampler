@@ -149,15 +149,16 @@ function loadScore(src) {
   pause();
   const notes = src.notes.map((n) => ({ ...n }));
   score = { title: src.title, notes, pedal: (src.pedal || []).map((p) => ({ ...p })) };
-  assignHands(notes);
+  assignHands(notes, score.pedal);
   assignFingers(notes.filter((n) => n.hand === 'L'), -1);
   assignFingers(notes.filter((n) => n.hand === 'R'), 1);
 
   // how long each note actually sounds (dampers vs. sustain pedal)
   const byPitch = new Map();
   for (const n of notes) {
-    let end = n.end;
-    for (const p of score.pedal) if (p.start <= n.end && n.end < p.end) { end = Math.max(end, p.end); break; }
+    const written = n.sounding ?? n.end; // `sounding`: written end of a pedal-sustained note
+    let end = written;
+    for (const p of score.pedal) if (p.start <= written && written < p.end) { end = Math.max(end, p.end); break; }
     n.soundEnd = end;
     if (!byPitch.has(n.pitch)) byPitch.set(n.pitch, []);
     byPitch.get(n.pitch).push(n);
@@ -175,9 +176,9 @@ function loadScore(src) {
   ui.seek.value = 0;
   ui.title.textContent = score.title;
   const nl = notes.filter((n) => n.hand === 'L').length;
-  const unf = notes.filter((n) => n.finger == null).length;
+  const unf = notes.filter((n) => n.finger == null || n.unreachable).length;
   ui.info.textContent = `${notes.length} notes · right hand ${notes.length - nl} · left hand ${nl} · ${fmt(perf.duration)}` +
-    (unf ? ` · ${unf} notes beyond five fingers` : '');
+    (unf ? ` · ${unf} notes out of reach` : '');
   updateTime();
 }
 

@@ -1,9 +1,9 @@
 """Download a small, reproducible sample of PianoMotion10M (Zenodo record 13297386).
 
-    python3 fetch_sample.py <data_dir> [videos_per_pianist=4]
+    python3 fetch_sample.py <data_dir> [videos_per_pianist=4] [seed=20241111]
 
 Fetches the MIDI archive (14 MB) and, for the four most-recorded pianists, two
-consecutive 30 s clips of N randomly chosen videos each (fixed seed): the pose
+consecutive 30 s clips of N randomly chosen videos each: the pose
 annotations and the matching audio. The big archives (4.4 GB and 2.6 GB) are
 not downloaded; single members are read with HTTP range requests.
 
@@ -63,6 +63,7 @@ def remote_zip(name):
 def main():
     root = sys.argv[1]
     per = int(sys.argv[2]) if len(sys.argv) > 2 else 4
+    seed = int(sys.argv[3]) if len(sys.argv) > 3 else 20241111
     data = os.path.join(root, 'data')
     os.makedirs(data, exist_ok=True)
 
@@ -82,7 +83,7 @@ def main():
         if name.endswith('.json'):
             p = name.split('/')
             vids[(p[-3], p[-2])].append(name)
-    random.seed(20241111)
+    random.seed(seed)
     picked = []
     for up in PIANISTS:
         cands = sorted(k for k in vids if k[0] == up and len(vids[k]) >= 4 and f'midi/{up}/{k[1]}.mid' in midis)

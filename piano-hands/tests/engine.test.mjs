@@ -13,7 +13,7 @@ const mats = new Proxy({}, { get: () => new THREE.MeshBasicMaterial() });
 const hands = { L: new Hand(-1, mats), R: new Hand(1, mats) };
 
 function prepare(score) {
-  assignHands(score.notes);
+  assignHands(score.notes, score.pedal);
   assignFingers(score.notes.filter((n) => n.hand === 'L'), -1);
   assignFingers(score.notes.filter((n) => n.hand === 'R'), 1);
   return score;
@@ -51,11 +51,12 @@ test('a finger never plays a new key while still holding another', () => {
 });
 
 test('fingertips stay on their keys while the keys are down', () => {
-  for (const [mk, p99] of [[furElise, 0.008], [technicalStudy, 0.016]]) {
+  for (const [mk, p99] of [[furElise, 0.003], [technicalStudy, 0.008]]) {
     const s = prepare(mk());
     const perf = new Performance(s, hands);
     const v = new THREE.Vector3();
     const errs = [];
+    assert.equal(s.notes.filter((n) => n.unreachable).length, 0, `${s.title}: every key can be reached`);
     for (const n of s.notes) {
       for (let t = n.start; t <= n.vEnd; t += 0.03) {
         perf.update(t);
@@ -76,6 +77,63 @@ test('keys go down exactly when notes sound', () => {
   const n = s.notes[10];
   assert.equal(perf.keyDepthAt(n.pitch, n.start), 1);
   assert.equal(perf.keyDepthAt(n.pitch, n.tContact - 0.01), 0);
+});
+
+// --- hand shape and wrist ----------------------------------------------------
+const melody = (names, step = 0.2, hand = 'R') => ({
+  title: 'test',
+  pedal: [],
+  notes: names.map((nm, i) => ({ pitch: noteNumber(nm), start: 1 + i * step, end: 1 + (i + 0.9) * step, velocity: 0.6, hand })),
+});
+
+test('relaxed fingertips rest over five neighbouring white keys', () => {
+  for (const h of [hands.L, hands.R]) {
+    for (let f = 0; f < 4; f++) {
+      const gap = h.natural[f + 1].x - h.natural[f].x;
+      assert.ok(Math.abs(gap - 0.0235) < 0.0005, `fingers ${f + 1}-${f + 2}: ${gap}`);
+    }
+  }
+});
+
+test('a five-finger pattern is played without moving the wrist', () => {
+  const up = ['C4', 'D4', 'E4', 'F4', 'G4', 'F4', 'E4', 'D4'];
+  const s = prepare(melody([...up, ...up, ...up, 'C4']));
+  assert.deepEqual(fingersOf(s.notes, 'R', 0, 5), [1, 2, 3, 4, 5]);
+  const perf = new Performance(s, hands);
+  const xs = [];
+  for (let t = 1; t < 5.8; t += 0.02) xs.push(perf.wristAt('R', t).x);
+  assert.ok(Math.max(...xs) - Math.min(...xs) < 0.004, `wrist travelled ${Math.max(...xs) - Math.min(...xs)} m`);
+});
+
+test('the hand turns with the forearm: outwards when far from the body', () => {
+  const yawAt = (names, hand) => new Performance(prepare(melody(names, 0.3, hand)), hands).wristAt(hand, 1.5).yaw;
+  // track units: positive = fingers turned towards the thumb side
+  assert.ok(yawAt(['C7', 'D7', 'E7', 'D7', 'C7'], 'R') < -0.1, 'right hand in the top octaves points outwards');
+  assert.ok(yawAt(['C3', 'D3', 'E3', 'D3', 'C3'], 'R') > 0.1, 'right hand crossing to the bass points inwards');
+  assert.ok(yawAt(['C1', 'D1', 'E1', 'D1', 'C1'], 'L') < -0.1, 'left hand in the bottom octaves points outwards');
+});
+
+test('pedal-sustained notes are released when the hand plays again', () => {
+  const n = (nm, start, end) => ({ pitch: noteNumber(nm), start, end, velocity: 0.6, hand: 'R' });
+  const notes = [n('C4', 1, 3), n('E4', 1.5, 3), n('G4', 2, 3), n('A4', 2.5, 2.7)];
+  assignHands(notes, [{ start: 1.05, end: 3 }]);
+  assert.ok(Math.abs(notes[0].end - 1.52) < 1e-9 && notes[0].sounding === 3, 'held until the next note of the hand');
+  assert.ok(Math.abs(notes[1].end - 2.02) < 1e-9);
+  assert.equal(notes[3].end, 2.7, 'a note released under the pedal keeps its written length');
+  assert.equal(notes[3].sounding, undefined);
+});
+
+test('single stream: bass, chords and melody go to the hands that can reach them', () => {
+  const notes = [];
+  const add = (nm, start, dur) => notes.push({ pitch: noteNumber(nm), start, end: start + dur, velocity: 0.6 });
+  const tune = ['E5', 'D5', 'C5', 'D5', 'E5', 'E5', 'E5', 'G5'];
+  tune.forEach((nm, i) => {
+    add(nm, 1 + i * 0.5, 0.45);
+    if (i % 2 === 0) add('C2', 1 + i * 0.5, 0.2);                    // bass note ...
+    else ['E3', 'G3', 'C4'].forEach((c) => add(c, 1 + i * 0.5, 0.4)); // ... then the chord, a leap away
+  });
+  assignHands(notes, []);
+  for (const x of notes) assert.equal(x.hand, x.pitch >= noteNumber('C5') ? 'R' : 'L', `pitch ${x.pitch}`);
 });
 
 // --- MIDI ----------------------------------------------------------------
@@ -113,7 +171,7 @@ test('two-track MIDI: lower staff goes to the left hand', () => {
     notes.push({ pitch: noteNumber('C3') + (i % 4), start: i * 0.25, end: i * 0.25 + 0.2, track: 1 });
   }
   const s = parseMidi(midiFile(notes, 2), 'two.mid');
-  assignHands(s.notes);
+  assignHands(s.notes, s.pedal);
   assert.ok(s.notes.filter((n) => n.pitch < 60).every((n) => n.hand === 'L'));
   assert.ok(s.notes.filter((n) => n.pitch >= 70).every((n) => n.hand === 'R'));
 });
@@ -121,7 +179,7 @@ test('two-track MIDI: lower staff goes to the left hand', () => {
 test('single-track MIDI is split between the hands by register and reach', () => {
   const src = technicalStudy();
   const s = parseMidi(midiFile(src.notes.map((n) => ({ ...n, track: 0 }))), 'study.mid');
-  assignHands(s.notes);
+  assignHands(s.notes, s.pedal);
   const agree = s.notes.filter((n) => {
     const o = src.notes.find((m) => m.pitch === n.pitch && Math.abs(m.start + (s.notes[0].start - src.notes[0].start) - n.start) < 0.01);
     return o && o.hand === n.hand;
